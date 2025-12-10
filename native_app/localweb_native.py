@@ -4,7 +4,6 @@ import sys
 import json
 import struct
 import base64
-import subprocess
 import configparser
 import traceback
 import base64
@@ -12,9 +11,93 @@ import binascii
 import datetime
 import sqlite3
 import logging
+from typing import Any
 from pathlib import Path
 from dataclasses import dataclass
 from contextlib import closing
+
+MIME_TYPE_EXT = {
+    "audio/aac": ".aac",
+    "application/x-abiword": ".abw",
+    "image/apng": ".apng",
+    "application/x-freearc": ".arc",
+    "image/avif": ".avif",
+    "video/x-msvideo": ".avi",
+    "application/vnd.amazon.ebook": ".azw",
+    "application/octet-stream": ".bin",
+    "image/bmp": ".bmp",
+    "application/x-bzip": ".bz",
+    "application/x-bzip2": ".bz2",
+    "application/x-cdf": ".cda",
+    "application/x-csh": ".csh",
+    "text/css": ".css",
+    "text/csv": ".csv",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.ms-fontobject": ".eot",
+    "application/epub+zip": ".epub",
+    "application/gzip": ".gz",
+    "image/gif": ".gif",
+    "text/html": ".html",
+    "image/vnd.microsoft.icon": ".ico",
+    "text/calendar": ".ics",
+    "application/java-archive": ".jar",
+    "image/jpeg": ".jpeg",
+    "text/javascript": ".js",
+    "application/json": ".json",
+    "application/ld+json": ".jsonld",
+    "text/markdown": ".md",
+    "audio/midi": ".midi",
+    "audio/x-midi": ".midi",
+    "text/javascript": ".mjs",
+    "audio/mpeg": ".mp3",
+    "video/mp4": ".mp4",
+    "video/mpeg": ".mpeg",
+    "application/vnd.apple.installer+xml": ".mpkg",
+    "application/vnd.oasis.opendocument.presentation": ".odp",
+    "application/vnd.oasis.opendocument.spreadsheet": ".ods",
+    "application/vnd.oasis.opendocument.text": ".odt",
+    "audio/ogg": ".oga",
+    "video/ogg": ".ogv",
+    "application/ogg": ".ogx",
+    "audio/ogg": ".opus",
+    "font/otf": ".otf",
+    "image/png": ".png",
+    "application/pdf": ".pdf",
+    "application/x-httpd-php": ".php",
+    "application/vnd.ms-powerpoint": ".ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+    "application/vnd.rar": ".rar",
+    "application/rtf": ".rtf",
+    "application/x-sh": ".sh",
+    "image/svg+xml": ".svg",
+    "application/x-tar": ".tar",
+    "<code>.tiff</code>, image/tiff": ".tif",
+    "video/mp2t": ".ts",
+    "font/ttf": ".ttf",
+    "text/plain": ".txt",
+    "application/vnd.visio": ".vsd",
+    "audio/wav": ".wav",
+    "audio/webm": ".weba",
+    "video/webm": ".webm",
+    "application/manifest+json": ".webmanifest",
+    "image/webp": ".webp",
+    "font/woff": ".woff",
+    "font/woff2": ".woff2",
+    "application/xhtml+xml": ".xhtml",
+    "application/vnd.ms-excel": ".xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/xml": ".xml",
+    "text/xml": ".xml",
+    "application/vnd.mozilla.xul+xml": ".xul",
+    "application/zip": ".zip",
+    "application/x-zip-compressed": ".zip",
+    "video/3gpp": ".3gp",
+    "audio/3gpp": ".3gp",
+    "video/3gpp2": ".3g2",
+    "audio/3gpp2": ".3g2",
+    "application/x-7z-compressed": ".7z",
+}
 
 DB_SCHEMA = (
 """
@@ -33,12 +116,6 @@ create table if not exists entities(
 
 class LocalWebUserError(Exception):
     pass
-
-def show_error(msg: str):
-    subprocess.run(["notify-send", "-u", "critical", "LocalWeb", msg])
-
-def show_info(msg: str):
-    subprocess.run(["notify-send", "LocalWeb", msg])
 
 @dataclass
 class Config:
@@ -75,19 +152,20 @@ def init_db(db_path: Path) -> sqlite3.Connection:
     db.executescript(DB_SCHEMA,)
     return db
 
-def get_message_from_browser() -> dict:
+def get_message_from_browser() -> Any:
     rawLength = sys.stdin.buffer.read(4)
     if len(rawLength) == 0:
         sys.exit(0)
-    messageLength = struct.unpack('@I', rawLength)[0]
+    messageLength = struct.unpack('=I', rawLength)[0]
     message = sys.stdin.buffer.read(messageLength).decode('utf-8')
     return json.loads(message)
 
-def send_success_to_browser():
-    # It doesn't matter what we send, as long as the length is greater than
-    # zero and the payload is valid JSON
-    sys.stdout.buffer.write(b"\x04\x00\x00\x00") # length
-    sys.stdout.buffer.write(b'"ok"') # payload
+def send_message_to_browser(msg: Any):
+    encoded_msg = json.dumps(msg).encode("utf-8")
+    encoded_length = struct.pack("=I", len(encoded_msg))
+    sys.stdout.buffer.write(encoded_length)
+    sys.stdout.buffer.write(encoded_msg)
+    sys.stdout.flush()
 
 def decode_base64(s) -> str:
     try: 
@@ -95,24 +173,21 @@ def decode_base64(s) -> str:
     except binascii.Error:
         raise LocalWebUserError("Received invalid filename from SingleFile")
 
-def save_webpage(config: Config, db: sqlite3.Connection, page_data: dict):
-    parts = page_data["filename"].split(" ")
-    if len(parts) != 3:
-        raise LocalWebUserError("Received invalid filename from SingleFile")
+def db_datetime_str(d: datetime.datetime) -> str:
+    return d.strftime("%Y-%m-%d %H:%M:%S")
 
-    [retrieved_at_str, url, title] = map(decode_base64, parts)
-    try:
-        retrieved_at = datetime.datetime.fromisoformat(retrieved_at_str)
-    except ValueError as e:
-        raise LocalWebUserError(e.args[0])
-
-    inserted_at = datetime.datetime.now(datetime.timezone.utc)
+def save_webpage(
+    config: Config,
+    db: sqlite3.Connection,
+    page: dict,
+):
+    now = datetime.datetime.now(datetime.timezone.utc)
     with db:
         cursor = db.cursor()
         try:
             cursor.execute(
                 "insert into entities(title, url, retrieved_at, inserted_at) values(?, ?, ?, ?)",
-                (title, url, retrieved_at.isoformat(), inserted_at.isoformat())
+                (page["title"], page["url"], db_datetime_str(now), db_datetime_str(now))
             )
         except sqlite3.IntegrityError as e:
             error_msg = e.args[0]
@@ -122,17 +197,52 @@ def save_webpage(config: Config, db: sqlite3.Connection, page_data: dict):
                 raise e
 
         entity_id = cursor.lastrowid
-        page_path = config.storage_path / f"page_{entity_id}.html"
-        page_path.write_text(page_data["content"])
+        file_ext = MIME_TYPE_EXT.get(page["mime_type"], "")
+        page_path = config.storage_path / f"page_{entity_id}{file_ext}"
+        if isinstance(page["contents"], str):
+            page_path.write_text(page["contents"])
+        else:
+            page_path.write_bytes(page["contents"])
 
-        show_info("Webpage stored successfully")
+def handle_message(config: Config, db: sqlite3.Connection, msg: dict):
+    match msg["sender"]:
+        case "singlefile":
+            if msg.get("method") == "save":
+                page = {
+                    "url": msg["pageData"]["url"],
+                    "title": msg["pageData"]["title"],
+                    "mime_type": "text/html",
+                    "contents": msg["pageData"]["content"],
+                }
+                save_webpage(config, db, page)
+            else:
+                raise LocalWebUserError("Message from browser is invalid")
+
+        case "localweb":
+            if msg.get("action") == "save":
+                page = {
+                    "url": msg["url"],
+                    "title": msg["title"],
+                    "mime_type": msg["mime_type"],
+                    "contents": base64.b64decode(msg["contents"]) if msg["is_base64"] else msg["contents"],
+                }
+                save_webpage(config, db, page)
+            else:
+                raise LocalWebUserError("Message from browser is invalid")
+
+        case _:
+            raise LocalWebUserError("Invalid message sender")
 
 
 ################################################################################
 logger = logging.getLogger(__name__)
 try:
     config = read_config()
-    logging.basicConfig(filename=config.storage_path / "error.log", level=logging.ERROR)
+    logging.basicConfig(
+        format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s",
+        filename=config.storage_path / "error.log",
+        level=logging.INFO
+    )
     db = init_db(config.db_path)
 
     # sqlite3.Connection does implement the context manager protocol but does
@@ -140,18 +250,21 @@ try:
     # `closing()` is a wrapper that actually calls `close()`.
     with closing(db):
         msg = get_message_from_browser()
-        if msg.get("method") == "save":
-            save_webpage(config, db, msg["pageData"])
-        else:
-            raise LocalWebUserError("Message from browser is invalid")
+        if "sender" not in msg:
+            msg["sender"] = "singlefile"
 
-        send_success_to_browser()
+        handle_message(config, db, msg)
+        send_message_to_browser({"status": "ok"})
 
 except LocalWebUserError as e:
-    show_error(e.args[0])
+    send_message_to_browser({
+        "status": "error",
+        "info": e.args[0],
+    })
 
 except Exception as e:
     logger.error("Uncaught exception", exc_info=e)
-
-    error_msg = "".join(traceback.format_exception(e))
-    show_error("".join(traceback.format_exception(e)))
+    send_message_to_browser({
+        "status": "error",
+        "info": "".join(traceback.format_exception_only(e)),
+    })

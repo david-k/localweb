@@ -1,22 +1,12 @@
 # LocalWeb
 
-LocalWeb is a browser extensions that helps you store web resources (web pages, PDFs, images, ..., basically anything with a URL) locally on your computer. Also, dumps all the information in a SQLite database so you can stay organized.
+LocalWeb is a browser extensions that helps you store web resources (web pages, PDFs, images, ..., basically anything with a URL) locally on your computer. Also, dumps additional information in a SQLite database so you can stay organized.
 
-LocalWeb is implemented as a wrapper around [SingleFile](https://github.com/gildas-lormeau/SingleFile), adding database support and the ability to handle non-HTML content.
+Internally, LocalWeb makes use of [SingleFile](https://github.com/gildas-lormeau/SingleFile) to convert web pages to single HTML files.
 
 ## Installation
 
-1. Install the SingleFile browser extension. Then, change the following settings:
-
-   - `File name`: Change `template` to the following:
-
-     ```
-     %encode-base64<{datetime-iso}> %encode-base64<{url-href}> %encode-base64<{page-title}>
-     ```
-
-     Also, set `max length` to some large value, e.g. 30000.
-
-   - `Destination`: Choose `save with SingleFile Companion`
+1. Clone the repo with `git clone https://github.com/david-k/localweb.git --recurse-submodules`
 
 2. Install the LocalWeb browser extension.
 

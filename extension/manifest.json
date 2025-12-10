@@ -5,16 +5,57 @@
 	"description": "TODO",
 	"homepage_url": "https://github.com/david-k/localweb",
 	"icons": {
-		"32": "icon_32.png"
+		"32": "assets/icon_32.png"
 	},
 
-	"permissions": ["activeTab", "<all_urls>"],
+	"browser_specific_settings": {
+		"gecko": {
+			"id": "@localweb"
+		}
+	},
+
+	"content_scripts": [
+		{
+			"matches": [
+				"<all_urls>"
+			],
+			"run_at": "document_start",
+			"js": [
+				"vendor/SingleFile/lib/chrome-browser-polyfill.js",
+				"vendor/SingleFile/lib/single-file-frames.js",
+				"vendor/SingleFile/lib/single-file-extension-frames.js"
+			],
+			"all_frames": true,
+			"match_about_blank": true
+		},
+		{
+			"matches": [
+				"<all_urls>"
+			],
+			"run_at": "document_start",
+			"js": [
+				"vendor/SingleFile/lib/chrome-browser-polyfill.js",
+				"vendor/SingleFile/lib/single-file-bootstrap.js",
+				"vendor/SingleFile/lib/single-file-extension-core.js",
+				"vendor/SingleFile/lib/single-file.js"
+			],
+			"all_frames": false
+		}
+	],
+
+	"background": {
+		"scripts": [
+			"vendor/SingleFile/lib/chrome-browser-polyfill.js",
+			"vendor/SingleFile/lib/single-file-background.js"
+		],
+		"persistent": false
+	},
+
+	"permissions": ["activeTab", "<all_urls>", "nativeMessaging"],
 
 	"browser_action": {
-		"default_icon": "icon_32.png",
-		"default_title": "LocalWeb"
-	},
-	"background": {
-		"scripts": ["background.js"]
+		"default_icon": "assets/icon_32.png",
+		"default_title": "LocalWeb",
+		"default_popup": "popup/index.html"
 	}
 }

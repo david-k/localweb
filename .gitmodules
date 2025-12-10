@@ -1,0 +1,4 @@
+[submodule "extension/vendor/SingleFile"]
+	path = extension/vendor/SingleFile
+	url = https://github.com/gildas-lormeau/SingleFile.git
+	shallow = true
