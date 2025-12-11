@@ -11,6 +11,7 @@ import binascii
 import datetime
 import sqlite3
 import logging
+import subprocess
 from typing import Any
 from pathlib import Path
 from dataclasses import dataclass
@@ -152,6 +153,12 @@ def init_db(db_path: Path) -> sqlite3.Connection:
     db.executescript(DB_SCHEMA,)
     return db
 
+def show_error(msg: str):
+    subprocess.run(["notify-send", "-u", "critical", "LocalWeb", msg])
+
+def show_info(msg: str):
+    subprocess.run(["notify-send", "LocalWeb", msg])
+
 def get_message_from_browser() -> Any:
     rawLength = sys.stdin.buffer.read(4)
     if len(rawLength) == 0:
@@ -236,6 +243,7 @@ def handle_message(config: Config, db: sqlite3.Connection, msg: dict):
 
 ################################################################################
 logger = logging.getLogger(__name__)
+show_notifications = False
 try:
     config = read_config()
     logging.basicConfig(
@@ -252,11 +260,17 @@ try:
         msg = get_message_from_browser()
         if "sender" not in msg:
             msg["sender"] = "singlefile"
+            show_notifications = True
 
         handle_message(config, db, msg)
         send_message_to_browser({"status": "ok"})
+        if show_notifications:
+            show_info("Success!")
 
 except LocalWebUserError as e:
+    if show_notifications:
+        show_error(e.args[0])
+
     send_message_to_browser({
         "status": "error",
         "info": e.args[0],
@@ -264,7 +278,11 @@ except LocalWebUserError as e:
 
 except Exception as e:
     logger.error("Uncaught exception", exc_info=e)
+    error_msg = "".join(traceback.format_exception_only(e))
+    if show_notifications:
+        show_error(error_msg)
+
     send_message_to_browser({
         "status": "error",
-        "info": "".join(traceback.format_exception_only(e)),
+        "info": error_msg
     })

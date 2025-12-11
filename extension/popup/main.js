@@ -147,14 +147,24 @@ class SaveForm extends LitElement {
 			grid-column: 1;
 		}
 
+		.success,
 		.error {
 			margin: 10px auto;
 			padding: 5px;
 			width: 90%;
-			border: 1px solid red;
 			border-radius: 5px;
+		}
+
+		.error {
+			border: 1px solid red;
 			background-color: #EBD4D4;
 			color: red;
+		}
+
+		.success {
+			border: 1px solid green;
+			background-color: #BFF7B0;
+			color: green;
 		}
 	`;
 
@@ -163,32 +173,49 @@ class SaveForm extends LitElement {
 		url: {},
 		title: {},
 		mime_type: {},
-		saving: {},
-		error_msg: {},
+		saving: {state: true},
+		local_save_result: {state: true},
+		webarchive_availability_result: {state: true},
+		webarchive_save_result: {state: true},
 	};
 
 	constructor() {
 		super();
 		this.saving = false;
-		this.error_msg = null;
+		this.local_save_result = null;
+		this.webarchive_save_result = null;
+		this.webarchive_availability_result = null;
+	}
+
+	connectedCallback() {
+		super.connectedCallback();
+		if(!this.url)
+			throw Error("SaveForm: No URL provided");
+
+		this.check_webarchive_snapshot_availability();
 	}
 
 	render() {
-		let error = this.error_msg === null ?
-			null : html`<p class="error">Error: ${this.error_msg}</p>`;
-
 		return html`
 			<form @submit=${this.submit}>
-				${error}
-				<p>
-					<label>
-						<div>Title</div>
-						<input name="title" size="40" type="text" .value=${this.title}>
-					</label>
-					<div>
-						<small style="color: gray">File type: ${this.mime_type}</small>
-					</div>
-				</p>
+				<fieldset>
+					<legend><small>Local</small></legend>
+					<p>
+						<label>
+							<div>Title</div>
+							<input name="title" size="40" type="text" .value=${this.title}>
+						</label>
+						<div>
+							<small style="color: gray">File type: ${this.mime_type}</small>
+						</div>
+					</p>
+					${this.render_local_save_result()}
+				</fieldset>
+				<fieldset>
+					<legend><small>Web Archive</small></legend>
+					${this.render_webarchive_availability_result()}
+					${this.render_webarchive_save_result()}
+				</fieldset>
 				<p>
 					<button class="btn-submit" .disabled=${this.saving}>
 						<span class="btn-submit-text" style="visibility: ${this.saving ? "hidden" : "visible"}">Save</span>
@@ -200,47 +227,166 @@ class SaveForm extends LitElement {
 		`;
 	}
 
+	render_local_save_result() {
+		if (!this.local_save_result)
+			return null;
+
+		if (this.local_save_result.status === "pending")
+			return html`<p>Saving...</p>`;
+		else if (this.local_save_result.status === "ok")
+			return html`<p class="success">Success</p>`;
+		else
+			return html`<p class="error">Error: ${this.local_save_result.info}</p>`;
+	}
+
+	render_webarchive_save_result() {
+		if (!this.webarchive_save_result)
+			return null;
+
+		if (this.webarchive_save_result.status === "pending")
+			return html`<p>Saving...</p>`;
+		else if (this.webarchive_save_result.status === "ok")
+			return html`<p class="success">Saved to <a href=${this.webarchive_save_result.url}>snapshot</a></p>`;
+		else
+			return html`<p class="error">Error: ${this.webarchive_save_result.info}</p>`;
+	}
+
+	render_webarchive_availability_result() {
+		let result = this.webarchive_availability_result;
+		if (!result)
+			return null;
+
+		if (result.status == "pending")
+			return html`Loading...`;
+		else {
+			let create_checkbox = (checked) => {
+				return html`
+					<p>
+						<label><input name="save-to-web-archive" type="checkbox" .checked=${checked}> Create snapshot</label>
+					</p>`;
+			};
+
+			if (result.status == "archived")
+				return html`<a href=${result.url}>Snapshot</a> [${result.timestamp}] ${create_checkbox(false)}`;
+			else if (result.status == "error")
+				return html`Error: ${result.info}`;
+			else if (result.status == "not_archived")
+				return html`No snapshot available ${create_checkbox(true)}`;
+		}
+	}
+
 	async submit(event) {
 		event.preventDefault();
+		this.saving = true;
+
 		let form = event.target;
 		let title = form.elements["title"].value;
+		let should_save_to_webarchive = form.elements["save-to-web-archive"].checked;
 
-		this.error_msg = null;
-		this.saving = true;
-		get_contents(this.tab_id, this.url, this.mime_type)
-			.then(contents => {
-				let is_binary = contents instanceof Uint8Array;
-				if (is_binary) {
-					contents = contents.toBase64();
-				}
-				return browser.runtime.sendNativeMessage("singlefile_companion", {
-					sender: "localweb",
-					action: "save",
-					url: this.url,
-					title: title,
-					mime_type: this.mime_type,
-					is_base64: is_binary,
-					contents: contents,
-				}).then(msg => {
-					if(!msg || !msg.hasOwnProperty("status"))
-						return Promise.reject("Invalid response from native app");
+		let promises = [this.save_locally(title)];
+		if (should_save_to_webarchive)
+			promises.push(this.save_to_webarchive())
 
-					if(msg.status === "ok") {
-						// Nothing to do
-					} else if(msg.status === "error")
-						return Promise.reject(msg.info);
-					else
-						return Promise.reject(`Native app has returned with unknown status: ${msg.status}`);
-				});
-			})
-			.then(() => window.close())
-			.catch(reason => {
-				this.error_msg = reason;
-				console.error("ERROR:", reason);
-			})
-			.finally(() => {
-				this.saving = false;
+		let results = await Promise.allSettled(promises);
+		this.saving = false;
+	}
+
+	async save_locally(title) {
+		this.local_save_result = {status: "pending"};
+		try {
+			let contents = await get_contents(this.tab_id, this.url, this.mime_type);
+			let is_binary = contents instanceof Uint8Array;
+			if (is_binary) {
+				contents = contents.toBase64();
+			}
+			let msg = await browser.runtime.sendNativeMessage("singlefile_companion", {
+				sender: "localweb",
+				action: "save",
+				url: this.url,
+				title: title,
+				mime_type: this.mime_type,
+				is_base64: is_binary,
+				contents: contents,
 			});
+
+			if (!msg || !msg.hasOwnProperty("status"))
+				throw Error("Invalid response from native app");
+
+			if (msg.status === "ok")
+				this.local_save_result = {status: "ok"};
+			else if (msg.status === "error")
+				throw Error(msg.info);
+			else
+				throw Error(`Native app has returned with unknown status: ${msg.status}`);
+		}
+		catch(e) {
+			console.error("ERROR:", e.message);
+			this.local_save_result = {
+				status: "error",
+				info: e.message,
+			};
+			throw e;
+		}
+	}
+
+	async save_to_webarchive() {
+		this.webarchive_save_result = {status: "pending"};
+		try {
+			let response = await fetch("https://web.archive.org/save/" + encodeURIComponent(this.url));
+			if (!response.ok)
+				throw Error(`Saving to WebArchive failed with status ${response.status} (${response.statusText})`)
+
+			this.webarchive_save_result = {
+				status: "ok",
+				url: response.url,
+			};
+		}
+		catch(e) {
+			console.error("ERROR:", e.message);
+			this.webarchive_save_result = {
+				status: "error",
+				info: e.message,
+			};
+			throw e;
+		}
+	}
+
+	async check_webarchive_snapshot_availability() {
+		this.webarchive_availability_result = {status: "pending"};
+		try {
+			let url = new URL("http://archive.org/wayback/available")
+			url.searchParams.append("url", this.url);
+			let response = await fetch(url);
+			if(!response.ok)
+				throw Error(`Request to WebArchive failed with code ${response.status}`);
+
+			let json = await response.json();
+			let snapshots = json["archived_snapshots"];
+			if(snapshots.hasOwnProperty("closest") && snapshots.closest.available) {
+				this.webarchive_availability_result = {
+					status: "archived",
+					timestamp: wayback_timestamp_to_string(snapshots.closest.timestamp),
+					url: snapshots.closest.url,
+				};
+			}
+			else
+				this.webarchive_availability_result = {status: "not_archived"};
+		}
+		catch(e) {
+			console.error("ERROR:", e.message);
+			this.webarchive_availability_result = {status: "error", info: e.message};
+		}
 	}
 }
 customElements.define('save-form', SaveForm);
+
+function wayback_timestamp_to_string(timestamp) {
+	let year = timestamp.substring(0, 4);
+	let month = timestamp.substring(4, 6);
+	let day = timestamp.substring(6, 8)
+	let hour = timestamp.substring(8, 10)
+	let minute = timestamp.substring(10, 12)
+	let second = timestamp.substring(12, 14)
+
+	return `${year}-${month}-${day} ${hour}:${minute}:${second} (UTC)`;
+}

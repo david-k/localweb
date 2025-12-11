@@ -2,7 +2,7 @@
 	"manifest_version": 2,
 	"name": "LocalWeb",
 	"version": "0.1",
-	"description": "TODO",
+	"description": "Let's you save webpages, PDFs, images etc. to a local database that represents your own, local subset of the web.",
 	"homepage_url": "https://github.com/david-k/localweb",
 	"icons": {
 		"32": "assets/icon_32.png"
