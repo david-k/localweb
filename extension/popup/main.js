@@ -47,11 +47,11 @@ async function get_contents(tab_id, url, mime_type) {
 	if (mime_type === "text/html") {
 		let results = await browser.tabs.executeScript(tab_id, {file: "../content_get_contents.js"});
 		return results[0];
-	} else {
+	}
+	else {
 		let response = await fetch(url);
-		if (!response.ok) {
+		if (!response.ok)
 			return Promise.reject(`Request failed with code ${response.status}`);
-		}
 
 		return response.bytes();
 	}
@@ -64,7 +64,8 @@ async function query_page_info(tab) {
 	try {
 		let results = await browser.tabs.executeScript(tab.id, {file: "../content_get_info.js"});
 		return results[0];
-	} catch(error) {
+	}
+	catch(error) {
 		// Since we already ensured that we are not visiting a restricted
 		// domain, the only remaining reason for script injection to fail is if
 		// a PDF is displayed (at least I hope that's the case)
@@ -148,8 +149,8 @@ class SaveForm extends LitElement {
 			grid-column: 1;
 		}
 
-		.success,
-		.error {
+		.error,
+		.success {
 			margin: 10px auto;
 			padding: 5px;
 			width: 90%;
@@ -302,9 +303,9 @@ class SaveForm extends LitElement {
 		try {
 			let contents = await get_contents(this.tab_id, this.url, this.mime_type);
 			let is_binary = contents instanceof Uint8Array;
-			if (is_binary) {
+			if (is_binary)
 				contents = contents.toBase64();
-			}
+
 			let msg = await browser.runtime.sendNativeMessage("singlefile_companion", {
 				sender: "localweb",
 				action: "save",

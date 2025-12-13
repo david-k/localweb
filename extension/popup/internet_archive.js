@@ -78,7 +78,7 @@ export async function check_availability(page_url) {
 	let response = await fetch(request_url, {
 		// By default, availability checks are cached for 6 hours.
 		// However, if the user creates a snapshot, we want to show the
-		// timestampt of that snapshot and not the cached one.
+		// timestamp of that snapshot and not the cached one.
 		cache: "reload",
 	});
 	if(!response.ok)
