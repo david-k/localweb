@@ -1,4 +1,5 @@
 import {LitElement, html, css} from "../vendor/lit-core-3.3.1.min.js";
+import IA from "./internet_archive.js";
 
 //==============================================================================
 // Utils
@@ -192,7 +193,7 @@ class SaveForm extends LitElement {
 		if(!this.url)
 			throw Error("SaveForm: No URL provided");
 
-		this.check_webarchive_snapshot_availability();
+		this.check_webarchive_page_availability();
 	}
 
 	render() {
@@ -326,115 +327,25 @@ class SaveForm extends LitElement {
 		}
 		catch(e) {
 			console.error("ERROR:", e.message);
-			this.local_save_result = {
-				status: "error",
-				info: e.message,
-			};
-			throw e;
+			this.local_save_result = {status: "error", info: e.message};
 		}
 	}
 
 	async save_to_webarchive() {
-		// The steps are as follows:
-		//
-		// 1. Send save request to WebArchive
-		// 2. Extract job ID from the response
-		// 3. Poll status of job ID until success or failure
-		//
-		// If you have an account, you get to use a nice JSON API for this. If
-		// not, you have to contend with HTML. I chose the latter for now.
-		//
-		// The code is adapted from the official WebArchive extension at
-		// https://github.com/internetarchive/wayback-machine-webextension/blob/master/webextension/scripts/background.js
-
 		this.webarchive_save_result = {status: "pending"};
 		try {
-			let response = await fetch("https://web.archive.org/save", {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/x-www-form-urlencoded",
-				},
-				body: new URLSearchParams({
-					url: this.url,
-					capture_all: "on" // Save snapshot even if it is an error page
-				}),
-			});
-			if (!response.ok)
-				throw Error(`Saving to WebArchive failed with code ${response.status} (${response.statusText})`)
-
-			let response_html = await response.text();
-			let job_id = extractJobIdFromHTML(response_html);
-			if (!job_id)
-				throw Error("WebArchive rejected the save request. Try again later.");
-
-			await this.poll_webarchive_job_status(this.url, job_id);
+			this.webarchive_save_result = await IA.save_page(this.url);
 		}
 		catch(e) {
 			console.error("ERROR:", e.message);
-			this.webarchive_save_result = {
-				status: "error",
-				info: e.message,
-			};
-			throw e;
+			this.webarchive_save_result = {status: "error", info: e.message};
 		}
 	}
 
-	async poll_webarchive_job_status(url, job_id) {
-		// Even for invalid job IDs WebArchive returns status === "pending".
-		// So to ensure that we don't poll indefinitely on an invalid job ID, define an upper limit.
-		const MAX_TRIES = 20;
-		const DEFAULT_WAIT_TIME_MS = 6000;
-
-		let wait_time_ms = DEFAULT_WAIT_TIME_MS;
-		for (let i = 0; i < MAX_TRIES; ++i) {
-			await sleep_ms(wait_time_ms);
-
-			let response = await fetch("https://web.archive.org/save/status/" + encodeURIComponent(job_id));
-			if (!response.ok)
-				throw Error(`Requesting status failed with code ${response.status} (${response.statusText})`)
-
-			if (response.headers.has("Retry-After")) {
-				let new_wait_time_s = Number(response.headers.get("Retry-After"));
-				if (!Number.isNaN(new_wait_time_s))
-					wait_time_ms = new_wait_time_s * 1000;
-			}
-
-			let data = await response.json();
-			if (data.status === "success") {
-				this.webarchive_save_result = {
-					status: "ok",
-					datetime_iso: wayback_timestamp_to_iso(data.timestamp),
-					url: "https://web.archive.org/web/" + encodeURIComponent(data.timestamp) + "/" + encodeURIComponent(url),
-				};
-
-				break;
-			}
-			else if (data.status !== "pending") {
-				throw Error("Saving snapshot failed");
-			}
-		}
-	}
-
-	async check_webarchive_snapshot_availability() {
+	async check_webarchive_page_availability() {
 		this.webarchive_availability_result = {status: "pending"};
 		try {
-			let url = new URL("http://archive.org/wayback/available")
-			url.searchParams.append("url", this.url);
-			let response = await fetch(url);
-			if(!response.ok)
-				throw Error(`Request to WebArchive failed with code ${response.status}`);
-
-			let json = await response.json();
-			let snapshots = json["archived_snapshots"];
-			if(snapshots.hasOwnProperty("closest") && snapshots.closest.available) {
-				this.webarchive_availability_result = {
-					status: "archived",
-					datetime_iso: wayback_timestamp_to_iso(snapshots.closest.timestamp),
-					url: snapshots.closest.url,
-				};
-			}
-			else
-				this.webarchive_availability_result = {status: "not_archived"};
+			this.webarchive_availability_result = await IA.check_availability(this.url);
 		}
 		catch(e) {
 			console.error("ERROR:", e.message);
@@ -443,26 +354,3 @@ class SaveForm extends LitElement {
 	}
 }
 customElements.define('save-form', SaveForm);
-
-function wayback_timestamp_to_iso(timestamp) {
-	let year = timestamp.substring(0, 4);
-	let month = timestamp.substring(4, 6);
-	let day = timestamp.substring(6, 8)
-	let hour = timestamp.substring(8, 10)
-	let minute = timestamp.substring(10, 12)
-	let second = timestamp.substring(12, 14)
-
-	return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
-}
-
-// Taken from https://github.com/internetarchive/wayback-machine-webextension/blob/master/webextension/scripts/background.js
-function extractJobIdFromHTML(html) {
-  // match the spn id pattern
-  const jobRegex = /spn2-[a-z0-9-]*/g
-  const jobIds = html.match(jobRegex)
-  return jobIds?.[0] || null;
-}
-
-function sleep_ms(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
