@@ -73,26 +73,32 @@ export async function wait_for_job_completion(job_id, page_url) {
 }
 
 export async function check_availability(page_url) {
-	let request_url = new URL("http://archive.org/wayback/available")
+	// This function uses the same endpoint as the Wayback Machine browser
+	// extension. Not sure though why the API subdomain is browser-specific.
+	//
+	// There is also a publicly documented alternative API described here:
+	// https://archive.org/help/wayback_api.php
+	// However, this endpoint seems to be unreliable. It sometimes reports that
+	// no snapshots are available even though it reported the opposite in the
+	// past. Also, the reported timestamp is often out of date.
+
+	let request_url = new URL("https://firefox-api.archive.org/__wb/sparkline")
+	request_url.searchParams.append("collection", "web");
+	request_url.searchParams.append("output", "json");
 	request_url.searchParams.append("url", page_url);
-	let response = await fetch(request_url, {
-		// By default, availability checks are cached for 6 hours.
-		// However, if the user creates a snapshot, we want to show the
-		// timestamp of that snapshot and not the cached one.
-		cache: "reload",
-	});
+	let response = await fetch(request_url);
 	if(!response.ok)
 		throw Error(`Request to WebArchive failed with code ${response.status}`);
 
 	let json = await response.json();
-	let snapshots = json["archived_snapshots"];
-	if(!snapshots.hasOwnProperty("closest") || !snapshots.closest.available)
+	let last_timestamp = json.last_ts;
+	if(!last_timestamp)
 		return {status: "not_archived"};
 
 	return {
 		status: "archived",
-		datetime_iso: timestamp_to_iso(snapshots.closest.timestamp),
-		url: snapshots.closest.url,
+		datetime_iso: timestamp_to_iso(last_timestamp),
+		url: "https://web.archive.org/web/" + encodeURIComponent(last_timestamp) + "/" + encodeURIComponent(page_url),
 	};
 }
 
