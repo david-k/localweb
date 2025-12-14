@@ -105,6 +105,7 @@ DB_SCHEMA = (
 create table if not exists entities(
     id integer not null,
     inserted_at datetime not null,
+    inserted_by text not null,
 
     title text not null,
     url text not null,
@@ -187,14 +188,15 @@ def save_webpage(
     config: Config,
     db: sqlite3.Connection,
     page: dict,
+    sender: str
 ):
     now = datetime.datetime.now(datetime.timezone.utc)
     with db:
         cursor = db.cursor()
         try:
             cursor.execute(
-                "insert into entities(title, url, retrieved_at, inserted_at) values(?, ?, ?, ?)",
-                (page["title"], page["url"], db_datetime_str(now), db_datetime_str(now))
+                "insert into entities(title, url, retrieved_at, inserted_at, inserted_by) values(?, ?, ?, ?, ?)",
+                (page["title"], page["url"], db_datetime_str(now), db_datetime_str(now), sender)
             )
         except sqlite3.IntegrityError as e:
             error_msg = e.args[0]
@@ -221,7 +223,7 @@ def handle_message(config: Config, db: sqlite3.Connection, msg: dict):
                     "mime_type": "text/html",
                     "contents": msg["pageData"]["content"],
                 }
-                save_webpage(config, db, page)
+                save_webpage(config, db, page, "singlefile_browser_ext")
             else:
                 raise LocalWebUserError("Message from browser is invalid")
 
@@ -233,7 +235,7 @@ def handle_message(config: Config, db: sqlite3.Connection, msg: dict):
                     "mime_type": msg["mime_type"],
                     "contents": base64.b64decode(msg["contents"]) if msg["is_base64"] else msg["contents"],
                 }
-                save_webpage(config, db, page)
+                save_webpage(config, db, page, "localweb_browser_ext")
             else:
                 raise LocalWebUserError("Message from browser is invalid")
 

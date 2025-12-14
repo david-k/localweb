@@ -306,7 +306,7 @@ class SaveForm extends LitElement {
 			if (is_binary)
 				contents = contents.toBase64();
 
-			let msg = await browser.runtime.sendNativeMessage("singlefile_companion", {
+			let msg = await browser.runtime.sendNativeMessage("localweb_companion", {
 				sender: "localweb",
 				action: "save",
 				url: this.url,

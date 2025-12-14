@@ -1,0 +1,7 @@
+{
+	"name": "localweb_companion",
+	"description": "Save webpages received from the LocalWeb extension to a local archive",
+	"path": "__NATIVE_BROWSER_APP_PATH__",
+	"type": "stdio",
+	"allowed_extensions": ["capture@localweb"]
+}
