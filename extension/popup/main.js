@@ -176,17 +176,21 @@ class SaveForm extends LitElement {
 		title: {},
 		mime_type: {},
 		saving: {state: true},
-		local_save_result: {state: true},
-		webarchive_availability_result: {state: true},
-		webarchive_save_result: {state: true},
+		// LocalWeb request results
+		LW_availability_result: {state: true},
+		LW_save_result: {state: true},
+		// InternetArchive request results
+		IA_availability_result: {state: true},
+		IA_save_result: {state: true},
 	};
 
 	constructor() {
 		super();
 		this.saving = false;
-		this.local_save_result = null;
-		this.webarchive_save_result = null;
-		this.webarchive_availability_result = null;
+		this.LW_availability_result = null;
+		this.LW_save_result = null;
+		this.IA_save_result = null;
+		this.IA_availability_result = null;
 	}
 
 	connectedCallback() {
@@ -194,7 +198,8 @@ class SaveForm extends LitElement {
 		if(!this.url)
 			throw Error("SaveForm: No URL provided");
 
-		this.check_webarchive_page_availability();
+		this.check_LW_availability();
+		this.check_IA_availability();
 	}
 
 	render() {
@@ -211,12 +216,13 @@ class SaveForm extends LitElement {
 							<small style="color: gray">File type: ${this.mime_type}</small>
 						</div>
 					</p>
-					${this.render_local_save_result()}
+					${this.render_LW_availability_result()}
+					${this.render_LW_save_result()}
 				</fieldset>
 				<fieldset>
 					<legend><small>Web Archive</small></legend>
-					${this.render_webarchive_availability_result()}
-					${this.render_webarchive_save_result()}
+					${this.render_IA_availability_result()}
+					${this.render_IA_save_result()}
 				</fieldset>
 				<p>
 					<button class="btn-submit" .disabled=${this.saving}>
@@ -229,37 +235,52 @@ class SaveForm extends LitElement {
 		`;
 	}
 
-	render_local_save_result() {
-		if (!this.local_save_result)
+	render_LW_save_result() {
+		if (!this.LW_save_result)
 			return null;
 
-		if (this.local_save_result.status === "pending")
+		if (this.LW_save_result.status === "pending")
 			return html`<p>Saving...</p>`;
-		else if (this.local_save_result.status === "ok")
+		else if (this.LW_save_result.status === "ok")
 			return html`<p class="success">Success</p>`;
 		else
-			return html`<p class="error">Error: ${this.local_save_result.info}</p>`;
+			return html`<p class="error">Error: ${this.LW_save_result.info}</p>`;
 	}
 
-	render_webarchive_save_result() {
-		if (!this.webarchive_save_result)
+	render_IA_save_result() {
+		if (!this.IA_save_result)
 			return null;
 
-		if (this.webarchive_save_result.status === "pending")
+		if (this.IA_save_result.status === "pending")
 			return html`<p>Saving...</p>`;
-		else if (this.webarchive_save_result.status === "ok") {
+		else if (this.IA_save_result.status === "ok") {
 			return html`
 				<p class="success">
-					Saved to <a href=${this.webarchive_save_result.url}>snapshot</a>
-					[${this.webarchive_save_result.datetime_iso} (UTC)]
+					Saved to <a href=${this.IA_save_result.url}>snapshot</a>
+					[${this.IA_save_result.datetime_iso} (UTC)]
 				</p>`;
 		}
 		else
-			return html`<p class="error">Error: ${this.webarchive_save_result.info}</p>`;
+			return html`<p class="error">Error: ${this.IA_save_result.info}</p>`;
 	}
 
-	render_webarchive_availability_result() {
-		let result = this.webarchive_availability_result;
+	render_LW_availability_result() {
+		let result = this.LW_availability_result;
+		if (!result)
+			return null;
+
+		if (result.status == "pending")
+			return html`Loading...`;
+		else if (result.status == "archived")
+			return html`Already saved`;
+		else if (result.status == "not_archived")
+			return html`Not saved`;
+		else if (result.status == "error")
+			return html`Error: ${result.info}`;
+	}
+
+	render_IA_availability_result() {
+		let result = this.IA_availability_result;
 		if (!result)
 			return null;
 
@@ -284,30 +305,32 @@ class SaveForm extends LitElement {
 
 	async submit(event) {
 		event.preventDefault();
+
+		this.LW_save_result = null;
+		this.IA_save_result = null;
 		this.saving = true;
 
 		let form = event.target;
 		let title = form.elements["title"].value;
 		let should_save_to_webarchive = form.elements["save-to-web-archive"].checked;
 
-		let promises = [this.save_locally(title)];
+		let promises = [this.save_to_LW(title)];
 		if (should_save_to_webarchive)
-			promises.push(this.save_to_webarchive())
+			promises.push(this.save_to_IA())
 
 		let results = await Promise.allSettled(promises);
 		this.saving = false;
 	}
 
-	async save_locally(title) {
-		this.local_save_result = {status: "pending"};
+	async save_to_LW(title) {
+		this.LW_save_result = {status: "pending"};
 		try {
 			let contents = await get_contents(this.tab_id, this.url, this.mime_type);
 			let is_binary = contents instanceof Uint8Array;
 			if (is_binary)
 				contents = contents.toBase64();
 
-			let msg = await browser.runtime.sendNativeMessage("localweb_companion", {
-				sender: "localweb",
+			let response = await send_native_message({
 				action: "save",
 				url: this.url,
 				title: title,
@@ -316,42 +339,66 @@ class SaveForm extends LitElement {
 				contents: contents,
 			});
 
-			if (!msg || !msg.hasOwnProperty("status"))
-				throw Error("Invalid response from native app");
-
-			if (msg.status === "ok")
-				this.local_save_result = {status: "ok"};
-			else if (msg.status === "error")
-				throw Error(msg.info);
+			if (response.status === "ok")
+				this.LW_save_result = {status: "ok"};
+			else if (response.status === "error")
+				throw Error(response.info);
 			else
-				throw Error(`Native app has returned with unknown status: ${msg.status}`);
+				throw Error(`Native app has returned with unknown status: ${response.status}`);
 		}
 		catch(e) {
 			console.error("ERROR:", e.message);
-			this.local_save_result = {status: "error", info: e.message};
+			this.LW_save_result = {status: "error", info: e.message};
 		}
 	}
 
-	async save_to_webarchive() {
-		this.webarchive_save_result = {status: "pending"};
+	async check_LW_availability() {
+		this.LW_availability_result = {status: "pending"};
 		try {
-			this.webarchive_save_result = await IA.save_page(this.url);
+			let response = await send_native_message({action: "query", url: this.url});
+
+			if (response.status === "ok")
+				this.LW_availability_result = {status: response.archived ? "archived" : "not_archived"};
+			else if (response.status === "error")
+				throw Error(response.info);
+			else
+				throw Error(`Native app has returned with unknown status: ${response.status}`);
 		}
 		catch(e) {
 			console.error("ERROR:", e.message);
-			this.webarchive_save_result = {status: "error", info: e.message};
+			this.LW_availability_result = {status: "error", info: e.message};
 		}
 	}
 
-	async check_webarchive_page_availability() {
-		this.webarchive_availability_result = {status: "pending"};
+	async save_to_IA() {
+		this.IA_save_result = {status: "pending"};
 		try {
-			this.webarchive_availability_result = await IA.check_availability(this.url);
+			this.IA_save_result = await IA.save_page(this.url);
 		}
 		catch(e) {
 			console.error("ERROR:", e.message);
-			this.webarchive_availability_result = {status: "error", info: e.message};
+			this.IA_save_result = {status: "error", info: e.message};
+		}
+	}
+
+	async check_IA_availability() {
+		this.IA_availability_result = {status: "pending"};
+		try {
+			this.IA_availability_result = await IA.check_availability(this.url);
+		}
+		catch(e) {
+			console.error("ERROR:", e.message);
+			this.IA_availability_result = {status: "error", info: e.message};
 		}
 	}
 }
 customElements.define('save-form', SaveForm);
+
+async function send_native_message(msg) {
+	msg.sender = "localweb";
+	let response = await browser.runtime.sendNativeMessage("localweb_companion", msg);
+	if (!response || !response.hasOwnProperty("status"))
+		throw Error("Invalid response from native app");
+
+	return response;
+}

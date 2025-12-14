@@ -181,6 +181,12 @@ def decode_base64(s) -> str:
     except binascii.Error:
         raise LocalWebUserError("Received invalid filename from SingleFile")
 
+def dict_disjoint_union(a: dict, b: dict) -> dict:
+    if not a.keys().isdisjoint(b):
+        raise Exception("Dictionaries not disjoint")
+
+    return a | b
+
 def db_datetime_str(d: datetime.datetime) -> str:
     return d.strftime("%Y-%m-%d %H:%M:%S")
 
@@ -213,6 +219,13 @@ def save_webpage(
         else:
             page_path.write_bytes(page["contents"])
 
+def check_if_archived(config: Config, db: sqlite3.Connection, url: str) -> bool:
+    with db:
+        cursor = db.cursor()
+        count = cursor.execute("select count(*) from entities where url = ?", (url,)).fetchone()[0]
+        return int(count) != 0
+
+
 def handle_message(config: Config, db: sqlite3.Connection, msg: dict):
     match msg["sender"]:
         case "singlefile":
@@ -224,8 +237,9 @@ def handle_message(config: Config, db: sqlite3.Connection, msg: dict):
                     "contents": msg["pageData"]["content"],
                 }
                 save_webpage(config, db, page, "singlefile_browser_ext")
+                return {}
             else:
-                raise LocalWebUserError("Message from browser is invalid")
+                raise LocalWebUserError("Invalid message from SingleFile browser extension")
 
         case "localweb":
             if msg.get("action") == "save":
@@ -236,8 +250,11 @@ def handle_message(config: Config, db: sqlite3.Connection, msg: dict):
                     "contents": base64.b64decode(msg["contents"]) if msg["is_base64"] else msg["contents"],
                 }
                 save_webpage(config, db, page, "localweb_browser_ext")
+                return {}
+            elif msg.get("action") == "query":
+                return {"archived": check_if_archived(config, db, msg["url"])}
             else:
-                raise LocalWebUserError("Message from browser is invalid")
+                raise LocalWebUserError("Invalid message from LocalWeb browser extension")
 
         case _:
             raise LocalWebUserError("Invalid message sender")
@@ -264,10 +281,11 @@ try:
             msg["sender"] = "singlefile"
             show_notifications = True
 
-        handle_message(config, db, msg)
-        send_message_to_browser({"status": "ok"})
+        response = handle_message(config, db, msg)
         if show_notifications:
             show_info("Success!")
+
+        send_message_to_browser(dict_disjoint_union({"status": "ok"}, response))
 
 except LocalWebUserError as e:
     if show_notifications:
