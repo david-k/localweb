@@ -109,6 +109,7 @@ create table if not exists entities(
 
     title text not null,
     url text not null,
+    mime_type text not null,
     retrieved_at datetime not null,
 
     constraint PK_entities__id primary key(id),
@@ -201,8 +202,11 @@ def save_webpage(
         cursor = db.cursor()
         try:
             cursor.execute(
-                "insert into entities(title, url, retrieved_at, inserted_at, inserted_by) values(?, ?, ?, ?, ?)",
-                (page["title"], page["url"], db_datetime_str(now), db_datetime_str(now), sender)
+                """insert into entities(
+                    title, url, mime_type, retrieved_at, inserted_at, inserted_by
+                )
+                values(?, ?, ?, ?, ?, ?)""",
+                (page["title"], page["url"], page["mime_type"], db_datetime_str(now), db_datetime_str(now), sender)
             )
         except sqlite3.IntegrityError as e:
             error_msg = e.args[0]
