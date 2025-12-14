@@ -219,11 +219,14 @@ def save_webpage(
         else:
             page_path.write_bytes(page["contents"])
 
-def check_if_archived(config: Config, db: sqlite3.Connection, url: str) -> bool:
+def check_if_archived(config: Config, db: sqlite3.Connection, url: str) -> dict|None:
     with db:
         cursor = db.cursor()
-        count = cursor.execute("select count(*) from entities where url = ?", (url,)).fetchone()[0]
-        return int(count) != 0
+        snapshot = cursor.execute("select retrieved_at from entities where url = ?", (url,)).fetchone()
+        if not snapshot:
+            return None
+
+        return {"timestamp": snapshot[0]}
 
 
 def handle_message(config: Config, db: sqlite3.Connection, msg: dict):

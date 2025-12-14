@@ -128,6 +128,7 @@ class SaveForm extends LitElement {
 		  color: blue;
 		}
 
+
 		.btn-submit {
 			float: right;
 			padding: 5px 15px;
@@ -149,6 +150,7 @@ class SaveForm extends LitElement {
 			grid-column: 1;
 		}
 
+
 		.error,
 		.success {
 			margin: 10px auto;
@@ -167,6 +169,23 @@ class SaveForm extends LitElement {
 			border: 1px solid green;
 			background-color: #BFF7B0;
 			color: green;
+		}
+
+
+		.archive-status-row {
+			display: flex;
+			align-items: center;
+		}
+
+		.archive-availability-cell {
+			flex-grow: 1;
+		}
+
+		.archive-checkbox-cell {
+			width: 4em;
+			border-left: 1px solid gray;
+			padding-left: 10px;
+			margin-left: 10px;
 		}
 	`;
 
@@ -206,22 +225,44 @@ class SaveForm extends LitElement {
 		return html`
 			<form @submit=${this.submit}>
 				<fieldset>
-					<legend><small>Local</small></legend>
-					<p>
-						<label>
-							<div>Title</div>
-							<input name="title" size="40" type="text" .value=${this.title}>
-						</label>
-						<div>
-							<small style="color: gray">File type: ${this.mime_type}</small>
+					<legend><small>Page</small></legend>
+					<label>
+						<div>Title</div>
+						<input name="title" size="40" type="text" .value=${this.title}>
+					</label>
+					<div>
+						<small style="color: gray">File type: ${this.mime_type}</small>
+					</div>
+				</fieldset>
+				<br>
+				<fieldset>
+					<legend><small>LocalWeb</small></legend>
+					<div class="archive-status-row">
+						<div class="archive-availability-cell">
+							${this.render_LW_availability_result()}
 						</div>
-					</p>
-					${this.render_LW_availability_result()}
+						<div class="archive-checkbox-cell">
+							<label style="display: block; text-align: center">
+								<input name="save-to-LW" type="checkbox" .checked=${this.LW_availability_result?.status !== "archived"}>
+								<br>Save
+							</label>
+						</div>
+					</div>
 					${this.render_LW_save_result()}
 				</fieldset>
 				<fieldset>
-					<legend><small>Web Archive</small></legend>
-					${this.render_IA_availability_result()}
+					<legend><small>Internet Archive</small></legend>
+					<div class="archive-status-row">
+						<div class="archive-availability-cell">
+							${this.render_IA_availability_result()}
+						</div>
+						<div class="archive-checkbox-cell">
+							<label style="display: block; text-align: center">
+								<input name="save-to-IA" type="checkbox" .checked=${this.IA_availability_result?.status !== "archived"}>
+								<br>Save
+							</label>
+						</div>
+					</div>
 					${this.render_IA_save_result()}
 				</fieldset>
 				<p>
@@ -272,7 +313,7 @@ class SaveForm extends LitElement {
 		if (result.status == "pending")
 			return html`Loading...`;
 		else if (result.status == "archived")
-			return html`Already saved`;
+			return html`Snapshot [${result.datetime_iso} (UTC)]`;
 		else if (result.status == "not_archived")
 			return html`Not saved`;
 		else if (result.status == "error")
@@ -287,19 +328,12 @@ class SaveForm extends LitElement {
 		if (result.status == "pending")
 			return html`Loading...`;
 		else {
-			let create_checkbox = (checked) => {
-				return html`
-					<p>
-						<label><input name="save-to-web-archive" type="checkbox" .checked=${checked}> Create snapshot</label>
-					</p>`;
-			};
-
 			if (result.status == "archived")
-				return html`<a href=${result.url}>Snapshot</a> [${result.datetime_iso} (UTC)] ${create_checkbox(false)}`;
+				return html`<a href=${result.url}>Snapshot [${result.datetime_iso} (UTC)]</a>`;
 			else if (result.status == "error")
 				return html`Error: ${result.info}`;
 			else if (result.status == "not_archived")
-				return html`No snapshot available ${create_checkbox(true)}`;
+				return html`Not saved`;
 		}
 	}
 
@@ -312,10 +346,13 @@ class SaveForm extends LitElement {
 
 		let form = event.target;
 		let title = form.elements["title"].value;
-		let should_save_to_webarchive = form.elements["save-to-web-archive"].checked;
+		let should_save_to_LW = form.elements["save-to-LW"].checked;
+		let should_save_to_IA = form.elements["save-to-IA"].checked;
 
-		let promises = [this.save_to_LW(title)];
-		if (should_save_to_webarchive)
+		let promises = [];
+		if (should_save_to_LW)
+			promises.push(this.save_to_LW(title))
+		if (should_save_to_IA)
 			promises.push(this.save_to_IA())
 
 		let results = await Promise.allSettled(promises);
@@ -358,7 +395,10 @@ class SaveForm extends LitElement {
 			let response = await send_native_message({action: "query", url: this.url});
 
 			if (response.status === "ok")
-				this.LW_availability_result = {status: response.archived ? "archived" : "not_archived"};
+				this.LW_availability_result = {
+					status: response.archived ? "archived" : "not_archived",
+					datetime_iso: response.archived?.timestamp,
+				};
 			else if (response.status === "error")
 				throw Error(response.info);
 			else
