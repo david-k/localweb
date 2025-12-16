@@ -300,7 +300,7 @@ except LocalWebUserError as e:
 
     send_message_to_browser({
         "status": "error",
-        "info": e.args[0],
+        "message": e.args[0],
     })
 
 except Exception as e:
@@ -311,5 +311,5 @@ except Exception as e:
 
     send_message_to_browser({
         "status": "error",
-        "info": error_msg
+        "message": error_msg
     })

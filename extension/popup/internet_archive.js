@@ -26,11 +26,24 @@ export async function save_page(page_url) {
 		throw Error(`Saving to WebArchive failed with code ${response.status} (${response.statusText})`)
 
 	let html = await response.text();
-	let job_id = extractJobIdFromHTML(html);
-	if (!job_id)
-		throw Error("WebArchive rejected the save request. Try again later.");
+	let info = extract_info(html);
+	console.log("Extracted status from Internet Archive:", info);
 
-	return await wait_for_job_completion(job_id, page_url);
+	if (info.status === "ok") {
+		let job_id = extract_job_id(html);
+		if (!job_id) {
+			throw Error(
+				`Failed to extract job ID. This could be because the Internet
+				Archive is handling too many request at the moment. In this
+				case try again later.`
+			);
+		}
+
+		let result = await wait_for_job_completion(job_id, page_url);
+		return {...result, message: info.message};
+	}
+	else
+		return info;
 }
 
 export async function wait_for_job_completion(job_id, page_url) {
@@ -113,12 +126,55 @@ function timestamp_to_iso(timestamp) {
 	return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 }
 
-// Taken from https://github.com/internetarchive/wayback-machine-webextension/blob/master/webextension/scripts/background.js
-function extractJobIdFromHTML(html) {
-  // match the spn id pattern
-  const jobRegex = /spn2-[a-z0-9-]*/g
-  const jobIds = html.match(jobRegex)
-  return jobIds?.[0] || null;
+function extract_job_id(html) {
+	let job_ids = html.match(/spn2-[a-z0-9-]*/g);
+	return job_ids?.[0] || null;
+}
+
+function extract_info(html_text) {
+	const parser = new DOMParser();
+	const doc = parser.parseFromString(html_text, "text/html");
+
+	let title_el = doc.querySelector("#spn-title");
+	if (!title_el) {
+		for(let el of doc.querySelectorAll("h2")) {
+			if (el.textContent === "Sorry") {
+				title_el = el;
+				break;
+			}
+		}
+	}
+
+	let message = title_el?.nextElementSibling?.textContent;
+	if (!message)
+		return {status: "ok", message: null};
+
+	return {
+		status: message_to_status(message),
+		message
+	};
+}
+
+function message_to_status(message) {
+	// "The capture will start in ~1 hour, 34 minutes because our service is
+	// currently overloaded. You may close your browser window and the page
+	// will still be saved."
+	if (message.indexOf("The capture will start in") !== -1)
+		return "postponed";
+
+	// "The same snapshot had been made 3 minutes ago. You can make new capture
+	// of this URL after 1 hour."
+	else if (message.indexOf("The same snapshot had been made") !== -1)
+		return "try_again_later";
+
+	// "This URL has been already captured 1 times today, which is a daily
+	// limit we have set for that Resource type. Please try again tomorrow.
+	// Please email us at "info@archive.org" if you would like to discuss this
+	// more."
+	else if (message.indexOf("This URL has been already captured") !== -1)
+		return "try_again_later";
+
+	return "ok";
 }
 
 function sleep_ms(ms) {

@@ -192,10 +192,11 @@ class SaveForm extends LitElement {
 		AsyncButton.styles,
 		css`
 			:host {
-			  color: blue;
+				color: blue;
 			}
 
 			.error,
+			.info,
 			.success {
 				margin: 10px auto;
 				padding: 5px;
@@ -207,6 +208,12 @@ class SaveForm extends LitElement {
 				border: 1px solid red;
 				background-color: #EBD4D4;
 				color: red;
+			}
+
+			.info {
+				border: 1px solid blue;
+				background-color: #D5DEF7;
+				color: blue;
 			}
 
 			.success {
@@ -320,7 +327,7 @@ class SaveForm extends LitElement {
 		if (this.LW_save_result.status === "ok")
 			return html`<p class="success">Success</p>`;
 		else if (this.LW_save_result.status !== "pending")
-			return html`<p class="error">Error: ${this.LW_save_result.info}</p>`;
+			return html`<p class="error">Error: ${this.LW_save_result.message}</p>`;
 	}
 
 	render_IA_save_result() {
@@ -328,14 +335,18 @@ class SaveForm extends LitElement {
 			return null;
 
 		if (this.IA_save_result.status === "ok") {
-			return html`
-				<p class="success">
-					Saved to <a href=${this.IA_save_result.url}>snapshot</a>
-					[${this.IA_save_result.datetime_iso} (UTC)]
-				</p>`;
+			let message;
+			if (this.IA_save_result.message)
+				message = html`<p>${this.IA_save_result.message}</p>`;
+
+			return html`<p class="success">Success ${message}</p>`;
 		}
+		else if (this.IA_save_result.status === "postponed")
+			return html`<p class="info">${this.IA_save_result.message}</p>`;
+		else if (this.IA_save_result.status === "try_again_later")
+			return html`<p class="info">${this.IA_save_result.message}</p>`;
 		else if (this.IA_save_result.status !== "pending")
-			return html`<p class="error">Error: ${this.IA_save_result.info}</p>`;
+			return html`<p class="error">Error: ${this.IA_save_result.message}</p>`;
 	}
 
 	render_LW_availability_result() {
@@ -350,7 +361,7 @@ class SaveForm extends LitElement {
 		else if (result.status == "not_archived")
 			return html`Not saved`;
 		else if (result.status == "error")
-			return html`Error: ${result.info}`;
+			return html`Error: ${result.message}`;
 	}
 
 	render_IA_availability_result() {
@@ -364,7 +375,7 @@ class SaveForm extends LitElement {
 			if (result.status == "archived")
 				return html`<a href=${result.url}>Snapshot [${result.datetime_iso} (UTC)]</a>`;
 			else if (result.status == "error")
-				return html`Error: ${result.info}`;
+				return html`Error: ${result.message}`;
 			else if (result.status == "not_archived")
 				return html`Not saved`;
 		}
@@ -393,13 +404,13 @@ class SaveForm extends LitElement {
 				this.LW_availability_result = {status: "archived", datetime_iso: response.timestamp};
 			}
 			else if (response.status === "error")
-				throw Error(response.info);
+				throw Error(response.message);
 			else
 				throw Error(`Native app has returned with unknown status: ${response.status}`);
 		}
 		catch(e) {
 			console.error("ERROR:", e.message);
-			this.LW_save_result = {status: "error", info: e.message};
+			this.LW_save_result = {status: "error", message: e.message};
 		}
 	}
 
@@ -414,13 +425,13 @@ class SaveForm extends LitElement {
 					datetime_iso: response.archived?.timestamp,
 				};
 			else if (response.status === "error")
-				throw Error(response.info);
+				throw Error(response.message);
 			else
 				throw Error(`Native app has returned with unknown status: ${response.status}`);
 		}
 		catch(e) {
 			console.error("ERROR:", e.message);
-			this.LW_availability_result = {status: "error", info: e.message};
+			this.LW_availability_result = {status: "error", message: e.message};
 		}
 	}
 
@@ -428,12 +439,17 @@ class SaveForm extends LitElement {
 		this.IA_save_result = {status: "pending"};
 		try {
 			this.IA_save_result = await IA.save_page(this.url);
-			if (this.IA_save_result.status === "ok")
-				this.IA_availability_result = {status: "archived", datetime_iso: this.IA_save_result.datetime_iso};
+			if (this.IA_save_result.status === "ok") {
+				this.IA_availability_result = {
+					status: "archived",
+					datetime_iso: this.IA_save_result.datetime_iso,
+					url: this.IA_save_result.url,
+				};
+			}
 		}
 		catch(e) {
 			console.error("ERROR:", e.message);
-			this.IA_save_result = {status: "error", info: e.message};
+			this.IA_save_result = {status: "error", message: e.message};
 		}
 	}
 
@@ -444,7 +460,7 @@ class SaveForm extends LitElement {
 		}
 		catch(e) {
 			console.error("ERROR:", e.message);
-			this.IA_availability_result = {status: "error", info: e.message};
+			this.IA_availability_result = {status: "error", message: e.message};
 		}
 	}
 }
