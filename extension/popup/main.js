@@ -272,51 +272,49 @@ class SaveForm extends LitElement {
 
 	render() {
 		return html`
-			<div>
-				<fieldset>
-					<legend><small>Page</small></legend>
-					<label>
-						<div>Title</div>
-						<input id="page-title" size="40" type="text" .value=${this.title}>
-					</label>
-					<div>
-						<small style="color: gray">File type: ${this.mime_type}</small>
+			<fieldset>
+				<legend><small>Page</small></legend>
+				<label>
+					<div>Title</div>
+					<input id="page-title" style="box-sizing: border-box; width: 100%;" type="text" .value=${this.title}>
+				</label>
+				<div>
+					<small style="color: gray">File type: ${this.mime_type}</small>
+				</div>
+			</fieldset>
+			<br>
+			<fieldset>
+				<legend><small>LocalWeb</small></legend>
+				<div class="archive-status-row">
+					<div class="archive-availability-cell">
+						${this.render_LW_availability_result()}
 					</div>
-				</fieldset>
-				<br>
-				<fieldset>
-					<legend><small>LocalWeb</small></legend>
-					<div class="archive-status-row">
-						<div class="archive-availability-cell">
-							${this.render_LW_availability_result()}
-						</div>
-						<div class="archive-checkbox-cell">
-							<label style="display: block; text-align: center">
-								<async-button
-									label="Save"
-									.handler=${() => this.save_to_LW()}
-									?disabled=${this.LW_availability_result?.status === "archived"}
-								/>
-							</label>
-						</div>
+					<div class="archive-checkbox-cell">
+						<label style="display: block; text-align: center">
+							<async-button
+								label="Save"
+								.handler=${() => this.save_to_LW()}
+								?disabled=${this.LW_availability_result?.status === "archived"}
+							/>
+						</label>
 					</div>
-					${this.render_LW_save_result()}
-				</fieldset>
-				<fieldset>
-					<legend><small>Internet Archive</small></legend>
-					<div class="archive-status-row">
-						<div class="archive-availability-cell">
-							${this.render_IA_availability_result()}
-						</div>
-						<div class="archive-checkbox-cell">
-							<label style="display: block; text-align: center">
-								<async-button label="Save" .handler=${() => this.save_to_IA()} />
-							</label>
-						</div>
+				</div>
+				${this.render_LW_save_result()}
+			</fieldset>
+			<fieldset>
+				<legend><small>Internet Archive</small></legend>
+				<div class="archive-status-row">
+					<div class="archive-availability-cell">
+						${this.render_IA_availability_result()}
 					</div>
-					${this.render_IA_save_result()}
-				</fieldset>
-			</div>
+					<div class="archive-checkbox-cell">
+						<label style="display: block; text-align: center">
+							<async-button label="Save" .handler=${() => this.save_to_IA()} />
+						</label>
+					</div>
+				</div>
+				${this.render_IA_save_result()}
+			</fieldset>
 		`;
 	}
 
