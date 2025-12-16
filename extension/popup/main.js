@@ -122,15 +122,19 @@ class MainElement extends LitElement {
 }
 customElements.define('main-element', MainElement);
 
-class SaveForm extends LitElement {
+
+class AsyncButton extends LitElement {
+	static properties = {
+		label: {},
+		disabled: {type: Boolean},
+		waiting: {state: true},
+	}
+
+	// Since we are not using a Shadow DOM you have to manually insert the CSS
+	// in one of the parent elements.
+	// Maybe inline the CSS so we don't need to do this?
 	static styles = css`
-		:host {
-		  color: blue;
-		}
-
-
-		.btn-submit {
-			float: right;
+		.async-button {
 			padding: 5px 15px;
 			display: grid;
 		}
@@ -138,63 +142,102 @@ class SaveForm extends LitElement {
 		/* By putting both the button text and the loading gif into the same
 		 * grid cell we ensure that the dimensions of the button remain the
 		 * same when switching between them */
-		.btn-submit-text {
+		.async-button-label {
 			grid-row: 1;
 			grid-column: 1;
 		}
 
-		.btn-submit-gif {
+		.async-button-gif {
 			margin: 0 auto;
 			height: 1rem;
 			grid-row: 1;
 			grid-column: 1;
 		}
-
-
-		.error,
-		.success {
-			margin: 10px auto;
-			padding: 5px;
-			width: 90%;
-			border-radius: 5px;
-		}
-
-		.error {
-			border: 1px solid red;
-			background-color: #EBD4D4;
-			color: red;
-		}
-
-		.success {
-			border: 1px solid green;
-			background-color: #BFF7B0;
-			color: green;
-		}
-
-
-		.archive-status-row {
-			display: flex;
-			align-items: center;
-		}
-
-		.archive-availability-cell {
-			flex-grow: 1;
-		}
-
-		.archive-checkbox-cell {
-			width: 4em;
-			border-left: 1px solid gray;
-			padding-left: 10px;
-			margin-left: 10px;
-		}
 	`;
+
+	createRenderRoot() {
+		// By returning `this` we disable the Shadow DOM (see
+		// https://lit.dev/docs/components/shadow-dom/#implementing-createrenderroot)
+		// Otherwise clicking the button wouldn't submit the surrounding form.
+		return this;
+	}
+
+	constructor() {
+		super();
+
+		this.label = "";
+		this.waiting = false;
+	}
+
+	render() {
+		let label_visibility = this.waiting ? "hidden" : "visible";
+		let gif_visibility = this.waiting ? "visible" : "hidden";
+		return html
+			`<button class="async-button" .disabled=${this.waiting || this.disabled} @click=${this.clicked}>
+				<span class="async-button-label" style="visibility: ${label_visibility}">${this.label}</span>
+				<img  class="async-button-gif"  style="visibility: ${gif_visibility}" src="../assets/loading.gif">
+			</button>`;
+	}
+
+	clicked() {
+		this.waiting = true;
+		this.handler().finally(() => this.waiting = false);
+	}
+}
+customElements.define('async-button', AsyncButton);
+
+
+class SaveForm extends LitElement {
+	static styles = [
+		AsyncButton.styles,
+		css`
+			:host {
+			  color: blue;
+			}
+
+			.error,
+			.success {
+				margin: 10px auto;
+				padding: 5px;
+				width: 90%;
+				border-radius: 5px;
+			}
+
+			.error {
+				border: 1px solid red;
+				background-color: #EBD4D4;
+				color: red;
+			}
+
+			.success {
+				border: 1px solid green;
+				background-color: #BFF7B0;
+				color: green;
+			}
+
+			.archive-status-row {
+				display: flex;
+				align-items: center;
+			}
+
+			.archive-availability-cell {
+				flex-grow: 1;
+			}
+
+			.archive-checkbox-cell {
+				width: 4em;
+				border-left: 1px solid gray;
+				padding-left: 10px;
+				margin-left: 10px;
+			}
+		`
+	];
 
 	static properties = {
 		tab_id: {},
 		url: {},
 		title: {},
 		mime_type: {},
-		saving: {state: true},
 		// LocalWeb request results
 		LW_availability_result: {state: true},
 		LW_save_result: {state: true},
@@ -205,7 +248,6 @@ class SaveForm extends LitElement {
 
 	constructor() {
 		super();
-		this.saving = false;
 		this.LW_availability_result = null;
 		this.LW_save_result = null;
 		this.IA_save_result = null;
@@ -223,12 +265,12 @@ class SaveForm extends LitElement {
 
 	render() {
 		return html`
-			<form @submit=${this.submit}>
+			<div>
 				<fieldset>
 					<legend><small>Page</small></legend>
 					<label>
 						<div>Title</div>
-						<input name="title" size="40" type="text" .value=${this.title}>
+						<input id="page-title" size="40" type="text" .value=${this.title}>
 					</label>
 					<div>
 						<small style="color: gray">File type: ${this.mime_type}</small>
@@ -243,8 +285,11 @@ class SaveForm extends LitElement {
 						</div>
 						<div class="archive-checkbox-cell">
 							<label style="display: block; text-align: center">
-								<input name="save-to-LW" type="checkbox" .checked=${this.LW_availability_result?.status !== "archived"}>
-								<br>Save
+								<async-button
+									label="Save"
+									.handler=${() => this.save_to_LW()}
+									?disabled=${this.LW_availability_result?.status === "archived"}
+								/>
 							</label>
 						</div>
 					</div>
@@ -258,21 +303,13 @@ class SaveForm extends LitElement {
 						</div>
 						<div class="archive-checkbox-cell">
 							<label style="display: block; text-align: center">
-								<input name="save-to-IA" type="checkbox" .checked=${this.IA_availability_result?.status !== "archived"}>
-								<br>Save
+								<async-button label="Save" .handler=${() => this.save_to_IA()} />
 							</label>
 						</div>
 					</div>
 					${this.render_IA_save_result()}
 				</fieldset>
-				<p>
-					<button class="btn-submit" .disabled=${this.saving}>
-						<span class="btn-submit-text" style="visibility: ${this.saving ? "hidden" : "visible"}">Save</span>
-						<img  class="btn-submit-gif"  style="visibility: ${this.saving ? "visible" : "hidden"}" src="../assets/loading.gif">
-					</button>
-					<div style="clear: both"></div>
-				</p>
-			</form>
+			</div>
 		`;
 	}
 
@@ -280,11 +317,9 @@ class SaveForm extends LitElement {
 		if (!this.LW_save_result)
 			return null;
 
-		if (this.LW_save_result.status === "pending")
-			return html`<p>Saving...</p>`;
-		else if (this.LW_save_result.status === "ok")
+		if (this.LW_save_result.status === "ok")
 			return html`<p class="success">Success</p>`;
-		else
+		else if (this.LW_save_result.status !== "pending")
 			return html`<p class="error">Error: ${this.LW_save_result.info}</p>`;
 	}
 
@@ -292,16 +327,14 @@ class SaveForm extends LitElement {
 		if (!this.IA_save_result)
 			return null;
 
-		if (this.IA_save_result.status === "pending")
-			return html`<p>Saving...</p>`;
-		else if (this.IA_save_result.status === "ok") {
+		if (this.IA_save_result.status === "ok") {
 			return html`
 				<p class="success">
 					Saved to <a href=${this.IA_save_result.url}>snapshot</a>
 					[${this.IA_save_result.datetime_iso} (UTC)]
 				</p>`;
 		}
-		else
+		else if (this.IA_save_result.status !== "pending")
 			return html`<p class="error">Error: ${this.IA_save_result.info}</p>`;
 	}
 
@@ -337,29 +370,7 @@ class SaveForm extends LitElement {
 		}
 	}
 
-	async submit(event) {
-		event.preventDefault();
-
-		this.LW_save_result = null;
-		this.IA_save_result = null;
-		this.saving = true;
-
-		let form = event.target;
-		let title = form.elements["title"].value;
-		let should_save_to_LW = form.elements["save-to-LW"].checked;
-		let should_save_to_IA = form.elements["save-to-IA"].checked;
-
-		let promises = [];
-		if (should_save_to_LW)
-			promises.push(this.save_to_LW(title))
-		if (should_save_to_IA)
-			promises.push(this.save_to_IA())
-
-		let results = await Promise.allSettled(promises);
-		this.saving = false;
-	}
-
-	async save_to_LW(title) {
+	async save_to_LW() {
 		this.LW_save_result = {status: "pending"};
 		try {
 			let contents = await get_contents(this.tab_id, this.url, this.mime_type);
@@ -367,17 +378,20 @@ class SaveForm extends LitElement {
 			if (is_binary)
 				contents = contents.toBase64();
 
+			let page_title = this.renderRoot.querySelector("#page-title").value;
 			let response = await send_native_message({
 				action: "save",
 				url: this.url,
-				title: title,
+				title: page_title,
 				mime_type: this.mime_type,
 				is_base64: is_binary,
 				contents: contents,
 			});
 
-			if (response.status === "ok")
+			if (response.status === "ok") {
 				this.LW_save_result = {status: "ok"};
+				this.LW_availability_result = {status: "archived", datetime_iso: response.timestamp};
+			}
 			else if (response.status === "error")
 				throw Error(response.info);
 			else
@@ -414,6 +428,8 @@ class SaveForm extends LitElement {
 		this.IA_save_result = {status: "pending"};
 		try {
 			this.IA_save_result = await IA.save_page(this.url);
+			if (this.IA_save_result.status === "ok")
+				this.IA_availability_result = {status: "archived", datetime_iso: this.IA_save_result.datetime_iso};
 		}
 		catch(e) {
 			console.error("ERROR:", e.message);

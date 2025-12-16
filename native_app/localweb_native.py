@@ -197,7 +197,7 @@ def save_webpage(
     page: dict,
     sender: str
 ):
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now_iso = db_datetime_str(datetime.datetime.now(datetime.timezone.utc))
     with db:
         cursor = db.cursor()
         try:
@@ -206,7 +206,7 @@ def save_webpage(
                     title, url, mime_type, retrieved_at, inserted_at, inserted_by
                 )
                 values(?, ?, ?, ?, ?, ?)""",
-                (page["title"], page["url"], page["mime_type"], db_datetime_str(now), db_datetime_str(now), sender)
+                (page["title"], page["url"], page["mime_type"], now_iso, now_iso, sender)
             )
         except sqlite3.IntegrityError as e:
             error_msg = e.args[0]
@@ -222,6 +222,8 @@ def save_webpage(
             page_path.write_text(page["contents"])
         else:
             page_path.write_bytes(page["contents"])
+
+        return {"timestamp": now_iso}
 
 def check_if_archived(config: Config, db: sqlite3.Connection, url: str) -> dict|None:
     with db:
@@ -243,8 +245,7 @@ def handle_message(config: Config, db: sqlite3.Connection, msg: dict):
                     "mime_type": "text/html",
                     "contents": msg["pageData"]["content"],
                 }
-                save_webpage(config, db, page, "singlefile_browser_ext")
-                return {}
+                return save_webpage(config, db, page, "singlefile_browser_ext")
             else:
                 raise LocalWebUserError("Invalid message from SingleFile browser extension")
 
@@ -256,8 +257,7 @@ def handle_message(config: Config, db: sqlite3.Connection, msg: dict):
                     "mime_type": msg["mime_type"],
                     "contents": base64.b64decode(msg["contents"]) if msg["is_base64"] else msg["contents"],
                 }
-                save_webpage(config, db, page, "localweb_browser_ext")
-                return {}
+                return save_webpage(config, db, page, "localweb_browser_ext")
             elif msg.get("action") == "query":
                 return {"archived": check_if_archived(config, db, msg["url"])}
             else:
@@ -288,11 +288,11 @@ try:
             msg["sender"] = "singlefile"
             show_notifications = True
 
-        response = handle_message(config, db, msg)
+        result = handle_message(config, db, msg)
         if show_notifications:
             show_info("Success!")
 
-        send_message_to_browser(dict_disjoint_union({"status": "ok"}, response))
+        send_message_to_browser(dict_disjoint_union({"status": "ok"}, result))
 
 except LocalWebUserError as e:
     if show_notifications:

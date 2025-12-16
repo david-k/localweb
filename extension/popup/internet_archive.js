@@ -91,14 +91,14 @@ export async function check_availability(page_url) {
 		throw Error(`Request to WebArchive failed with code ${response.status}`);
 
 	let json = await response.json();
-	let last_timestamp = json.last_ts;
-	if(!last_timestamp)
+	let latest_timestamp = json.last_ts;
+	if(!latest_timestamp)
 		return {status: "not_archived"};
 
 	return {
 		status: "archived",
-		datetime_iso: timestamp_to_iso(last_timestamp),
-		url: "https://web.archive.org/web/" + encodeURIComponent(last_timestamp) + "/" + encodeURIComponent(page_url),
+		datetime_iso: timestamp_to_iso(latest_timestamp),
+		url: "https://web.archive.org/web/" + encodeURIComponent(latest_timestamp) + "/" + encodeURIComponent(page_url),
 	};
 }
 
