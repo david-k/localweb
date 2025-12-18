@@ -114,7 +114,7 @@ create table if not exists entities(
 
     constraint PK_entities__id primary key(id),
     constraint UK_entities__url unique(url)
-);
+) STRICT;
 """)
 
 class LocalWebUserError(Exception):

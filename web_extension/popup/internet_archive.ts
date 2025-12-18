@@ -1,5 +1,9 @@
+export type SaveResult =
+	| {status: "ok", datetime_iso: string, url: string, message: string|null}
+	| {status: "postponed", message: string|null}
+	| {status: "try_again_later", message: string|null};
 
-export async function save_page(page_url) {
+export async function save_page(page_url: string): Promise<SaveResult> {
 	// The steps are as follows:
 	//
 	// 1. Send save request to WebArchive
@@ -43,10 +47,10 @@ export async function save_page(page_url) {
 		return {...result, message: info.message};
 	}
 	else
-		return info;
+		return {status: info.status, message: info.message};
 }
 
-export async function wait_for_job_completion(job_id, page_url) {
+export async function wait_for_job_completion(job_id: string, page_url: string): Promise<SaveResult> {
 	// Even for invalid job IDs WebArchive returns status === "pending".
 	// So to ensure that we don't poll indefinitely on an invalid job ID,
 	// define an upper limit.
@@ -76,6 +80,7 @@ export async function wait_for_job_completion(job_id, page_url) {
 				status: "ok",
 				datetime_iso: timestamp_to_iso(data.timestamp),
 				url: "https://web.archive.org/web/" + encodeURIComponent(data.timestamp) + "/" + encodeURIComponent(page_url),
+				message: null
 			};
 		}
 
@@ -85,7 +90,11 @@ export async function wait_for_job_completion(job_id, page_url) {
 	throw Error("Max number of poll attempts reached");
 }
 
-export async function check_availability(page_url) {
+export type AvailabilityResult =
+	| {status: "archived", datetime_iso: string, url: string}
+	| {status: "not_archived"};
+
+export async function check_availability(page_url: string): Promise<AvailabilityResult> {
 	// This function uses the same endpoint as the Wayback Machine browser
 	// extension. Not sure though why the API subdomain is browser-specific.
 	//
@@ -115,7 +124,7 @@ export async function check_availability(page_url) {
 	};
 }
 
-function timestamp_to_iso(timestamp) {
+function timestamp_to_iso(timestamp: string): string {
 	let year = timestamp.substring(0, 4);
 	let month = timestamp.substring(4, 6);
 	let day = timestamp.substring(6, 8)
@@ -126,12 +135,17 @@ function timestamp_to_iso(timestamp) {
 	return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 }
 
-function extract_job_id(html) {
+function extract_job_id(html: string): string|null {
 	let job_ids = html.match(/spn2-[a-z0-9-]*/g);
 	return job_ids?.[0] || null;
 }
 
-function extract_info(html_text) {
+type PageInfo = {
+	status: "ok" | "postponed" | "try_again_later",
+	message: string|null,
+};
+
+function extract_info(html_text: string): PageInfo {
 	const parser = new DOMParser();
 	const doc = parser.parseFromString(html_text, "text/html");
 
@@ -155,7 +169,7 @@ function extract_info(html_text) {
 	};
 }
 
-function message_to_status(message) {
+function message_to_status(message: string): "ok"|"postponed"|"try_again_later" {
 	// "The capture will start in ~1 hour, 34 minutes because our service is
 	// currently overloaded. You may close your browser window and the page
 	// will still be saved."
@@ -177,12 +191,6 @@ function message_to_status(message) {
 	return "ok";
 }
 
-function sleep_ms(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+function sleep_ms(ms: number): Promise<undefined> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
-
-////////////////////////////////////////////////////////////////////////////////
-export default {
-	save_page,
-	check_availability,
-};

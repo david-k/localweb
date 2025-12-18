@@ -8,13 +8,18 @@ Internally, LocalWeb makes use of [SingleFile](https://github.com/gildas-lormeau
 
 Currently, only Firefox/Linux is supported.
 
-1. Clone the repo with `git clone https://github.com/david-k/localweb.git --recurse-submodules`
+1. Clone the repo with `git clone https://github.com/david-k/localweb.git --recurse-submodules`. Then run
+
+   ```sh
+   npm install
+   make
+   ```
 
 2. Install the LocalWeb browser extension.
 
-   The easiest way is to visit `about:debugging` → "This Firefox" → "Load Temporary Add-on..." and select `extension/manifest.json`.
+   The easiest way is to visit `about:debugging` → "This Firefox" → "Load Temporary Add-on..." and select `build/web_extension/manifest.json`.
 
-3. Run `python install.py`. This installs a Python app that actually writes the downloaded web pages to disk and writes some meta data (title, url, date) into a SQLite database.
+3. Run `make install`. This installs a Python app that actually writes the downloaded web pages to disk and writes some meta data (title, url, date) into a SQLite database.
 
 4. Create a file `~/.localweb` and adjust the following to your needs:
 
