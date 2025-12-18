@@ -11,10 +11,10 @@ type PageInfo =
 
 class MainElement extends LitElement {
 	@property({state:true})
-	tab_id: number|null = null;
+	tab_id: number|undefined = undefined;
 
 	@property({state:true})
-	page_info: PageInfo|null = null;
+	page_info: PageInfo|undefined = undefined;
 
 	constructor() {
 		super();
@@ -33,11 +33,11 @@ class MainElement extends LitElement {
 	}
 
 	render() {
-		if (this.page_info === null)
+		if (!this.page_info)
 			return html`<p>Loading...</p>`;
 		else {
 			if (this.page_info.restricted)
-				return html`<p>Restricted page</p>`;
+				return html`<p style="text-align: center">Restricted page</p>`;
 			else {
 				return html`
 					<save-form
@@ -62,7 +62,7 @@ class AsyncButton extends LitElement {
 	@property({state: true})
 	waiting: boolean = false;
 
-	handler: (() => Promise<unknown>) | null = null;
+	handler: (() => Promise<unknown>) | undefined = undefined;
 
 	// Since we are not using a Shadow DOM you have to manually insert the CSS
 	// in one of the parent elements.
@@ -115,15 +115,15 @@ class AsyncButton extends LitElement {
 }
 customElements.define('async-button', AsyncButton);
 
-type LocalwebAvailabilityResult =
-	| {status: "archived", datetime_iso: string}
-	| {status: "not_archived"}
-
 type OpState<T> =
 	| {state: "pending"}
 	| {state: "in_progress"}
 	| {state: "done", result: T}
 	| {state: "error", message: string};
+
+type LocalwebAvailabilityResult =
+	| {status: "archived", datetime_iso: string}
+	| {status: "not_archived"}
 
 class SaveForm extends LitElement {
 	static styles = [
@@ -256,13 +256,13 @@ class SaveForm extends LitElement {
 
 	render_LW_save_result() {
 		if (this.LW_save_op.state === "pending" || this.LW_save_op.state === "in_progress") {
-			return null;
+			return undefined;
 		}
 		else if (this.LW_save_op.state === "done") {
-			return html`<p class="success">Success</p>`;
+			return html`<div class="success">Success</div>`;
 		}
 		else if (this.LW_save_op.state === "error") {
-			return html`<p class="error">Error: ${this.LW_save_op.message}</p>`;
+			return html`<div class="error">Error: ${this.LW_save_op.message}</div>`;
 		}
 
 		unreachable(this.LW_save_op);
@@ -270,7 +270,7 @@ class SaveForm extends LitElement {
 
 	render_IA_save_result() {
 		if (this.IA_save_op.state === "pending" || this.IA_save_op.state === "in_progress") {
-			return null;
+			return undefined;
 		}
 		else if (this.IA_save_op.state === "done") {
 			let save_result: IA.SaveResult = this.IA_save_op.result;
@@ -279,24 +279,40 @@ class SaveForm extends LitElement {
 				message = html`<p>${save_result.message}</p>`;
 
 			if (save_result.status === "postponed")
-				return html`<p class="info">Postponed ${message}</p>`;
+				return html`<div class="info">Postponed ${message}</div>`;
 			else if (save_result.status === "try_again_later")
-				return html`<p class="info">Try again later ${message}</p>`;
-			else if (save_result.status === "ok")
-				return html`<p class="success">Success ${message}</p>`;
+				return html`<div class="info">Try again later ${message}</div>`;
+			else if (save_result.status === "ok") {
+				return html`
+					<div class="success">
+						Success
+						${message}
+						<p>
+							Note that it may take some time for the capture to
+							be processed. During this time, the timestamp of
+							the previous snapshot will be displayed, and
+							visiting the newest snapshot may redirect to the
+							previous one.
+						</p>
+					</div>
+				`;
+			}
 
 			unreachable(save_result);
 		}
 		else if (this.IA_save_op.state === "error") {
-			return html`<p class="error">Error: ${this.IA_save_op.message}</p>`;
+			return html`<div class="error">Error: ${this.IA_save_op.message}</div>`;
 		}
 
 		unreachable(this.IA_save_op);
 	}
 
 	render_LW_availability_result() {
-		if (this.LW_availability_op.state === "pending" || this.LW_availability_op.state === "in_progress") {
-			return null;
+		if (this.LW_availability_op.state === "pending") {
+			return undefined;
+		}
+		else if (this.LW_availability_op.state === "in_progress") {
+			return html`Loading...`;
 		}
 		else if (this.LW_availability_op.state === "done") {
 			let result: LocalwebAvailabilityResult = this.LW_availability_op.result;
@@ -315,10 +331,8 @@ class SaveForm extends LitElement {
 	}
 
 	render_IA_availability_result() {
-		let result = this.IA_availability_op;
-
 		if (this.IA_availability_op.state === "pending")
-			return null;
+			return undefined;
 		else if (this.IA_availability_op.state === "in_progress")
 			return html`Loading...`;
 		else if (this.IA_availability_op.state === "done") {
@@ -372,7 +386,7 @@ class SaveForm extends LitElement {
 	}
 
 	async check_LW_availability() {
-		this.LW_availability_op = {state: "pending"};
+		this.LW_availability_op = {state: "in_progress"};
 		try {
 			let response = await send_native_message({action: "query", url: this.url});
 
@@ -398,7 +412,7 @@ class SaveForm extends LitElement {
 	}
 
 	async save_to_IA() {
-		this.IA_save_op = {state: "pending"};
+		this.IA_save_op = {state: "in_progress"};
 		try {
 			this.IA_save_op = {
 				state: "done",
@@ -423,7 +437,7 @@ class SaveForm extends LitElement {
 	}
 
 	async check_IA_availability() {
-		this.IA_availability_op = {state: "pending"};
+		this.IA_availability_op = {state: "in_progress"};
 		try {
 			this.IA_availability_op = {
 				state: "done",

@@ -1,7 +1,7 @@
 export type SaveResult =
-	| {status: "ok", datetime_iso: string, url: string, message: string|null}
-	| {status: "postponed", message: string|null}
-	| {status: "try_again_later", message: string|null};
+	| {status: "ok", datetime_iso: string, url: string, message: string|undefined}
+	| {status: "postponed", message: string|undefined}
+	| {status: "try_again_later", message: string|undefined};
 
 export async function save_page(page_url: string): Promise<SaveResult> {
 	// The steps are as follows:
@@ -31,11 +31,9 @@ export async function save_page(page_url: string): Promise<SaveResult> {
 
 	let html = await response.text();
 	let info = extract_info(html);
-	console.log("Extracted status from Internet Archive:", info);
-
 	if (info.status === "ok") {
 		let job_id = extract_job_id(html);
-		if (!job_id) {
+		if (job_id === undefined) {
 			throw Error(
 				`Failed to extract job ID. This could be because the Internet
 				Archive is handling too many request at the moment. In this
@@ -80,7 +78,7 @@ export async function wait_for_job_completion(job_id: string, page_url: string):
 				status: "ok",
 				datetime_iso: timestamp_to_iso(data.timestamp),
 				url: "https://web.archive.org/web/" + encodeURIComponent(data.timestamp) + "/" + encodeURIComponent(page_url),
-				message: null
+				message: undefined
 			};
 		}
 
@@ -135,14 +133,14 @@ function timestamp_to_iso(timestamp: string): string {
 	return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 }
 
-function extract_job_id(html: string): string|null {
+function extract_job_id(html: string): string|undefined {
 	let job_ids = html.match(/spn2-[a-z0-9-]*/g);
-	return job_ids?.[0] || null;
+	return job_ids?.[0] || undefined;
 }
 
 type PageInfo = {
 	status: "ok" | "postponed" | "try_again_later",
-	message: string|null,
+	message: string|undefined,
 };
 
 function extract_info(html_text: string): PageInfo {
@@ -160,11 +158,11 @@ function extract_info(html_text: string): PageInfo {
 	}
 
 	let message = title_el?.nextElementSibling?.textContent;
-	if (!message)
-		return {status: "ok", message: null};
+	if(message && message.trim().startsWith("Save also in my web archive"))
+		message = undefined;
 
 	return {
-		status: message_to_status(message),
+		status: message ? message_to_status(message) : "ok",
 		message
 	};
 }
