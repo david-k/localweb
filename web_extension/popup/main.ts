@@ -138,7 +138,8 @@ class SaveForm extends LitElement {
 			.success {
 				margin: 10px auto;
 				padding: 5px;
-				width: 90%;
+				box-sizing: border-box;
+				width: 100%;
 				border-radius: 5px;
 			}
 
@@ -167,6 +168,7 @@ class SaveForm extends LitElement {
 
 			.archive-availability-cell {
 				flex-grow: 1;
+				text-align: center;
 			}
 
 			.archive-checkbox-cell {
@@ -211,8 +213,7 @@ class SaveForm extends LitElement {
 			<fieldset>
 				<legend><small>Page</small></legend>
 				<label>
-					<div>Title</div>
-					<input id="page-title" style="box-sizing: border-box; width: 100%;" type="text" .value=${this.title}>
+					<input id="page-title" style="padding: 5px; box-sizing: border-box; width: 100%;" type="text" .value=${this.title}>
 				</label>
 				<div>
 					<small style="color: gray">File type: ${this.mime_type}</small>
@@ -312,14 +313,14 @@ class SaveForm extends LitElement {
 			return undefined;
 		}
 		else if (this.LW_availability_op.state === "in_progress") {
-			return html`Loading...`;
+			return html`loading...`;
 		}
 		else if (this.LW_availability_op.state === "done") {
 			let result: LocalwebAvailabilityResult = this.LW_availability_op.result;
 			if (result.status == "archived")
 				return html`Snapshot [${result.datetime_iso} (UTC)]`;
 			else if (result.status == "not_archived")
-				return html`Not saved`;
+				return html`~ not saved ~`;
 
 			unreachable(result);
 		}
@@ -334,13 +335,13 @@ class SaveForm extends LitElement {
 		if (this.IA_availability_op.state === "pending")
 			return undefined;
 		else if (this.IA_availability_op.state === "in_progress")
-			return html`Loading...`;
+			return html`loading...`;
 		else if (this.IA_availability_op.state === "done") {
 			let result: IA.AvailabilityResult = this.IA_availability_op.result;
 			if (result.status == "archived")
 				return html`<a href=${result.url}>Snapshot [${result.datetime_iso} (UTC)]</a>`;
 			else if (result.status == "not_archived")
-				return html`Not saved`;
+				return html`~ not saved ~`;
 
 			unreachable(result);
 		}

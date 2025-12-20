@@ -1,2 +1,3 @@
 build/
-web_extension/node_modules/
+node_modules/
+__pycache__/

@@ -1,0 +1,22 @@
+<!doctype HTML>
+<html>
+	<head>
+		<title>LocalWeb</title>
+
+		<style>
+			body {
+				background-color: #EBDBB2;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>LocalWeb</h1>
+		<ul>
+			{% for object in objects  %}
+			<li>
+				<a href="{{ url_for("view_object", object_id=object.id) }}">{{ object.title }}</a> &nbsp;&nbsp; <small><i>({{ object.inserted_at }})</i></small>
+			</li>
+			{% endfor %}
+		</ul>
+	</body>
+</html>

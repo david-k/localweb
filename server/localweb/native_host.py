@@ -17,6 +17,13 @@ from pathlib import Path
 from dataclasses import dataclass
 from contextlib import closing
 
+from .common import (
+    LocalWebUserError,
+    Config,
+    read_config,
+    init_db,
+)
+
 MIME_TYPE_EXT = {
     "audio/aac": ".aac",
     "application/x-abiword": ".abw",
@@ -100,61 +107,6 @@ MIME_TYPE_EXT = {
     "application/x-7z-compressed": ".7z",
 }
 
-DB_SCHEMA = (
-"""
-create table if not exists entities(
-    id integer not null,
-    inserted_at datetime not null,
-    inserted_by text not null,
-
-    title text not null,
-    url text not null,
-    mime_type text not null,
-    retrieved_at datetime not null,
-
-    constraint PK_entities__id primary key(id),
-    constraint UK_entities__url unique(url)
-) STRICT;
-""")
-
-class LocalWebUserError(Exception):
-    pass
-
-@dataclass
-class Config:
-    storage_path: Path
-    db_path: Path
-
-def parse_config_value(parser: configparser.ConfigParser, key: str) -> str:
-    value = parser.get(configparser.UNNAMED_SECTION, key, fallback=None)
-    if value is None:
-        raise LocalWebUserError(f"Loading config failed: no value for \"{key}\"")
-
-    return value
-
-def read_config() -> Config:
-    config_path = Path.home() / ".localweb"
-    if not config_path.exists():
-        raise LocalWebUserError("Configuration file not found")
-
-    parser = configparser.ConfigParser(allow_unnamed_section=True)
-    parser.read(config_path)
-    config = Config(
-        storage_path = Path(parse_config_value(parser, "storage_path")).expanduser(),
-        db_path = Path(parse_config_value(parser, "db_path")).expanduser(),
-    )
-
-    if not config.storage_path.exists():
-        raise LocalWebUserError(f"Storage path \"{config.storage_path}\" does not exist")
-
-    return config
-
-def init_db(db_path: Path) -> sqlite3.Connection:
-    db = sqlite3.connect(db_path, autocommit=False)
-    db.execute("PRAGMA foreign_keys = ON")
-    db.executescript(DB_SCHEMA,)
-    return db
-
 def show_error(msg: str):
     subprocess.run(["notify-send", "-u", "critical", "LocalWeb", msg])
 
@@ -202,7 +154,7 @@ def save_webpage(
         cursor = db.cursor()
         try:
             cursor.execute(
-                """insert into entities(
+                """insert into objects(
                     title, url, mime_type, retrieved_at, inserted_at, inserted_by
                 )
                 values(?, ?, ?, ?, ?, ?)""",
@@ -210,14 +162,17 @@ def save_webpage(
             )
         except sqlite3.IntegrityError as e:
             error_msg = e.args[0]
-            if error_msg == "UNIQUE constraint failed: entities.url":
+            if error_msg == "UNIQUE constraint failed: objects.url":
                 raise LocalWebUserError("URL has already been archived")
             else:
                 raise e
 
-        entity_id = cursor.lastrowid
+        object_id = cursor.lastrowid
         file_ext = MIME_TYPE_EXT.get(page["mime_type"], "")
-        page_path = config.storage_path / f"page_{entity_id}{file_ext}"
+        filename = f"page_{object_id}{file_ext}"
+        db.execute("update objects set filename = ? where id = ?", (filename, object_id))
+
+        page_path = config.storage_path / filename
         if isinstance(page["contents"], str):
             page_path.write_text(page["contents"])
         else:
@@ -228,14 +183,14 @@ def save_webpage(
 def check_if_archived(config: Config, db: sqlite3.Connection, url: str) -> dict|None:
     with db:
         cursor = db.cursor()
-        snapshot = cursor.execute("select retrieved_at from entities where url = ?", (url,)).fetchone()
+        snapshot = cursor.execute("select retrieved_at from objects where url = ?", (url,)).fetchone()
         if not snapshot:
             return None
 
         return {"timestamp": snapshot[0]}
 
 
-def handle_message(config: Config, db: sqlite3.Connection, msg: dict):
+def handle_message(config: Config, db: sqlite3.Connection, msg: dict) -> dict:
     match msg["sender"]:
         case "singlefile":
             if msg.get("method") == "save":
@@ -269,47 +224,49 @@ def handle_message(config: Config, db: sqlite3.Connection, msg: dict):
 
 ################################################################################
 logger = logging.getLogger(__name__)
-show_notifications = False
-try:
-    config = read_config()
-    logging.basicConfig(
-        format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s",
-        filename=config.storage_path / "error.log",
-        level=logging.INFO
-    )
-    db = init_db(config.db_path)
 
-    # sqlite3.Connection does implement the context manager protocol but does
-    # not close the connection on exit (it calls commit/rollback instead).
-    # `closing()` is a wrapper that actually calls `close()`.
-    with closing(db):
-        msg = get_message_from_browser()
-        if "sender" not in msg:
-            msg["sender"] = "singlefile"
-            show_notifications = True
+def main():
+    show_notifications = False
+    try:
+        config = read_config()
+        logging.basicConfig(
+            format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s",
+            filename=config.storage_path / "error.log",
+            level=logging.INFO
+        )
+        db = init_db(config.db_path)
 
-        result = handle_message(config, db, msg)
+        # sqlite3.Connection does implement the context manager protocol but does
+        # not close the connection on exit (it calls commit/rollback instead).
+        # `closing()` is a wrapper that actually calls `close()`.
+        with closing(db):
+            msg = get_message_from_browser()
+            if "sender" not in msg:
+                msg["sender"] = "singlefile"
+                show_notifications = True
+
+            result = handle_message(config, db, msg)
+            if show_notifications:
+                show_info("Success!")
+
+            send_message_to_browser(dict_disjoint_union({"status": "ok"}, result))
+
+    except LocalWebUserError as e:
         if show_notifications:
-            show_info("Success!")
+            show_error(e.args[0])
 
-        send_message_to_browser(dict_disjoint_union({"status": "ok"}, result))
+        send_message_to_browser({
+            "status": "error",
+            "message": e.args[0],
+        })
 
-except LocalWebUserError as e:
-    if show_notifications:
-        show_error(e.args[0])
+    except Exception as e:
+        logger.error("Uncaught exception", exc_info=e)
+        error_msg = "".join(traceback.format_exception_only(e))
+        if show_notifications:
+            show_error(error_msg)
 
-    send_message_to_browser({
-        "status": "error",
-        "message": e.args[0],
-    })
-
-except Exception as e:
-    logger.error("Uncaught exception", exc_info=e)
-    error_msg = "".join(traceback.format_exception_only(e))
-    if show_notifications:
-        show_error(error_msg)
-
-    send_message_to_browser({
-        "status": "error",
-        "message": error_msg
-    })
+        send_message_to_browser({
+            "status": "error",
+            "message": error_msg
+        })
