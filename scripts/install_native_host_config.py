@@ -1,7 +1,5 @@
 import sys
-import shutil
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 
 FIREFOX_NATIVE_HOST_DIR = "~/.mozilla/native-messaging-hosts"

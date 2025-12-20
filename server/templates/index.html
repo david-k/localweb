@@ -7,16 +7,57 @@
 			body {
 				background-color: #EBDBB2;
 			}
+
+			#container {
+				margin: 0 auto;
+				width: 1000px;
+			}
+
+			h1 {
+				text-align: center;
+				border-bottom: 2px dotted gray;
+			}
+
+			ul {
+				list-style-type: none;
+			}
+
+			li {
+				margin-bottom: 10px;
+			}
 		</style>
 	</head>
 	<body>
-		<h1>LocalWeb</h1>
-		<ul>
-			{% for object in objects  %}
-			<li>
-				<a href="{{ url_for("view_object", object_id=object.id) }}">{{ object.title }}</a> &nbsp;&nbsp; <small><i>({{ object.inserted_at }})</i></small>
-			</li>
-			{% endfor %}
-		</ul>
+		<div id="container">
+			<header>
+				<h1>LocalWeb</h1>
+			</header>
+			<main>
+				<ul>
+					{% for object in objects  %}
+					<li>
+						<a href="{{ url_for("view_object", object_id=object.id) }}">{{ object.title }}</a>
+						&nbsp;&nbsp; <small><i>({{ object.inserted_at }})</i></small>
+						&nbsp;&nbsp; <small><a href="{{ url_for("delete_object", object_id=object.id) }}" onclick="on_click_delete(event)">delete</a></small>
+					</li>
+					{% endfor %}
+				</ul>
+			</main>
+		</div>
+
+		<script>
+			async function on_click_delete(event) {
+				event.preventDefault();
+				if (confirm("Delete this object?")) {
+					let response = await fetch(event.target.href, {method: "POST"});
+					if (!response.ok) {
+						alert("Deleting object failed");
+						return;
+					}
+
+					window.location.reload();
+				}
+			}
+		</script>
 	</body>
 </html>

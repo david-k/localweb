@@ -1,10 +1,13 @@
 import sqlite3
+from pathlib import Path
 from contextlib import closing
 from flask import (
     Flask,
+    Response,
     render_template,
     url_for,
     send_file,
+    abort,
 )
 
 from .common import (
@@ -12,7 +15,7 @@ from .common import (
     init_db,
 )
 
-def main():
+def main(**kwargs):
     config = read_config()
     app = Flask("localweb-server")
 
@@ -29,9 +32,22 @@ def main():
             db.row_factory = sqlite3.Row
             obj = db.execute("select * from objects where id = ?", (object_id,)).fetchone()
             if not obj:
-                raise Exception("Object not found")
+                abort(404, "Object not found")
 
             return send_file(config.storage_path / obj["filename"])
 
+    @app.route("/delete/<int:object_id>", methods=("POST",))
+    def delete_object(object_id):
+        with init_db(config.db_path) as db:
+            db.row_factory = sqlite3.Row
+            obj = db.execute("select * from objects where id = ?", (object_id,)).fetchone()
+            if not obj:
+                abort(404, "Object not found")
 
-    app.run()
+            Path(config.storage_path / obj["filename"]).unlink(missing_ok=True)
+            db.execute("delete from objects where id = ?", (obj["id"],))
+
+            return Response(status=200)
+
+
+    app.run(**kwargs)

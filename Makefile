@@ -22,14 +22,14 @@ localweb-server:
 	python -m zipapp "${build_dir}/localweb-server-files" --main localweb.main:main -p "/usr/bin/env python3" -o "${build_dir}/localweb-server"
 
 run-dev-server: server/venv
-	cd server && source venv/bin/activate && python -m localweb.main serve
+	cd server && source venv/bin/activate && python -m localweb.main serve --debug
 
 # Installs the following components:
 # - localweb-server
 # - localweb-native-host
 # - configuration files for the browser so the browser extension can talk to
 #   localweb-native-host
-install:
+install: server/venv
 	./scripts/install_server.sh ${prefix}
 
 	python scripts/install_native_host_config.py \

@@ -11,12 +11,12 @@ pip install -r server/requirements.txt --upgrade --target "${prefix}/lib/localwe
 
 cat << END_OF_INPUT > "${prefix}/bin/localweb-native-host"
 #!/usr/bin/sh
-cd ${prefix}/lib/localweb && python -m localweb.main native-host
+cd ${prefix}/lib/localweb && python -m localweb.main native-host "\$@"
 END_OF_INPUT
 
 cat << END_OF_INPUT > "${prefix}/bin/localweb-server"
 #!/usr/bin/sh
-cd ${prefix}/lib/localweb && python -m localweb.main serve
+cd ${prefix}/lib/localweb && python -m localweb.main serve "\$@"
 END_OF_INPUT
 
 chmod +x "${prefix}/bin/localweb-native-host"
