@@ -11,12 +11,11 @@ from flask import (
 )
 
 from .common import (
-    read_config,
+    Config,
     init_db,
 )
 
-def main(**kwargs):
-    config = read_config()
+def main(config: Config, **kwargs):
     app = Flask("localweb-server")
 
     @app.route("/")

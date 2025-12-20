@@ -225,15 +225,9 @@ def handle_message(config: Config, db: sqlite3.Connection, msg: dict) -> dict:
 ################################################################################
 logger = logging.getLogger(__name__)
 
-def main():
+def main(config: Config):
     show_notifications = False
     try:
-        config = read_config()
-        logging.basicConfig(
-            format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s",
-            filename=config.storage_path / "error.log",
-            level=logging.INFO
-        )
         db = init_db(config.db_path)
 
         # sqlite3.Connection does implement the context manager protocol but does
