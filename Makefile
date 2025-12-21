@@ -10,7 +10,6 @@ web-extension:
 	cd web_extension/ && npx esbuild --bundle --sourcemap popup/main.ts --outfile=../${web_extension_build_dir}/popup/main.js
 	cp -u web_extension/manifest.json ${web_extension_build_dir}
 	cp -u web_extension/popup/index.html ${web_extension_build_dir}/popup/index.html
-	cp -u web_extension/new_tab.html ${web_extension_build_dir}/new_tab.html
 	cp -ur web_extension/content ${web_extension_build_dir}
 	cp -ur web_extension/assets ${web_extension_build_dir}
 	cp -ur web_extension/vendor ${web_extension_build_dir}

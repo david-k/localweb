@@ -14,10 +14,6 @@
 		}
 	},
 
-	"chrome_url_overrides": {
-		"newtab": "new_tab.html"
-	},
-
 	"content_scripts": [
 		{
 			"matches": [
