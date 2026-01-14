@@ -24,9 +24,9 @@ def main(config: Config, **kwargs):
         with init_db(config.db_path) as db:
             db.row_factory = sqlite3.Row
             all_objects = db.execute("select * from objects order by inserted_at desc").fetchall()
-            objects_by_date = groupby(all_objects, key = lambda o: o["inserted_at"][:10])
+            objects_by_month = groupby(all_objects, key = lambda o: o["inserted_at"][5:7] + "/" + o["inserted_at"][:4])
 
-            return render_template("index.html", objects_by_date=objects_by_date)
+            return render_template("index.html", objects_by_month=objects_by_month)
 
     @app.route("/view/<int:object_id>")
     def view_object(object_id):
