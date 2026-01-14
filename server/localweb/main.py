@@ -27,7 +27,7 @@ def main():
     logging.basicConfig(
         format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s",
         filename=config.storage_path / "error.log",
-        level=logging.INFO
+        level=logging.ERROR
     )
 
     if args.subcommand == "native-host":

@@ -25,6 +25,12 @@
 			li {
 				margin-bottom: 10px;
 			}
+
+			.delete-link {
+				font-size: small;
+				font-style: italic;
+				color: gray;
+			}
 		</style>
 	</head>
 	<body>
@@ -33,15 +39,17 @@
 				<h1>LocalWeb</h1>
 			</header>
 			<main>
-				<ul>
-					{% for object in objects  %}
-					<li>
-						<a href="{{ url_for("view_object", object_id=object.id) }}">{{ object.title }}</a>
-						&nbsp;&nbsp; <small><i>({{ object.inserted_at }})</i></small>
-						&nbsp;&nbsp; <small><a href="{{ url_for("delete_object", object_id=object.id) }}" onclick="on_click_delete(event)">delete</a></small>
-					</li>
-					{% endfor %}
-				</ul>
+				{% for date, objects in objects_by_date  %}
+					<h3>{{ date }}</h3>
+					<ul>
+						{% for object in objects  %}
+						<li>
+							<a href="{{ url_for("view_object", object_id=object.id) }}">{{ object.title }}</a>
+							&nbsp;&nbsp; <a class="delete-link" href="{{ url_for("delete_object", object_id=object.id) }}" onclick="on_click_delete(event)">delete</a>
+						</li>
+						{% endfor %}
+					</ul>
+				{% endfor %}
 			</main>
 		</div>
 

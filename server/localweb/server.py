@@ -1,6 +1,7 @@
 import sqlite3
 from pathlib import Path
 from contextlib import closing
+from itertools import groupby
 from flask import (
     Flask,
     Response,
@@ -22,8 +23,10 @@ def main(config: Config, **kwargs):
     def index():
         with init_db(config.db_path) as db:
             db.row_factory = sqlite3.Row
-            objects = db.execute("select * from objects order by inserted_at desc").fetchall()
-            return render_template("index.html", objects=objects)
+            all_objects = db.execute("select * from objects order by inserted_at desc").fetchall()
+            objects_by_date = groupby(all_objects, key = lambda o: o["inserted_at"][:10])
+
+            return render_template("index.html", objects_by_date=objects_by_date)
 
     @app.route("/view/<int:object_id>")
     def view_object(object_id):
